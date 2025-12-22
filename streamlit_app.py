@@ -40,7 +40,7 @@ class HighVolumeAutoPartsCatalog:
         # Для пользовательских колонок
         self.custom_columns: Dict[str, Any] = {}
 
-        # Если есть в облаке - загружаем
+        # Загружаем настройки из облака, если включено
         self.load_user_settings_from_cloud()
 
         st.set_page_config(
@@ -74,7 +74,7 @@ class HighVolumeAutoPartsCatalog:
         config_path = self.data_dir / "cloud_config.json"
         self.cloud_config["last_sync"] = int(time.time())
         config_path.write_text(json.dumps(self.cloud_config, indent=2, ensure_ascii=False), encoding='utf-8')
-        # Если облако включено, сохраняем настройки туда
+        # Загружаем настройки в облако, если включено
         if self.cloud_config.get('enabled'):
             self.upload_settings_to_cloud()
 
@@ -98,6 +98,7 @@ class HighVolumeAutoPartsCatalog:
 
     def save_price_rules(self):
         price_rules_path = self.data_dir / "price_rules.json"
+        self.price_rules['last_update'] = int(time.time())
         price_rules_path.write_text(json.dumps(self.price_rules, indent=2, ensure_ascii=False), encoding='utf-8')
         if self.cloud_config.get('enabled'):
             self.upload_settings_to_cloud()
@@ -152,15 +153,13 @@ class HighVolumeAutoPartsCatalog:
         if self.cloud_config.get('enabled'):
             self.upload_settings_to_cloud()
 
-    # --- Обмен данными с облаком ---
+    # --- Обмен настройками с облаком ---
     def upload_settings_to_cloud(self):
         # Реализуйте загрузку файлов настроек на облако (например, S3)
-        # Это пример, зависит от используемой облачной службы
         try:
             import boto3
             s3 = boto3.client('s3', region_name=self.cloud_config.get('region'))
             bucket = self.cloud_config.get('bucket')
-            # Загружаем файлы настроек
             files = [
                 (self.data_dir / "cloud_config.json", "cloud_config.json"),
                 (self.data_dir / "price_rules.json", "price_rules.json"),
@@ -171,10 +170,9 @@ class HighVolumeAutoPartsCatalog:
                 if filepath.exists():
                     s3.upload_file(str(filepath), bucket, remote_name)
         except Exception as e:
-            logger.error(f"Ошибка загрузки настроек в облако: {e}")
+            logger.error(f"Ошибка загрузки в облако: {e}")
 
     def load_settings_from_cloud(self):
-        # Аналогично, загрузка настроек с облака, если есть
         try:
             import boto3
             s3 = boto3.client('s3', region_name=self.cloud_config.get('region'))
@@ -194,7 +192,7 @@ class HighVolumeAutoPartsCatalog:
             self.exclusion_rules = self.load_exclusion_rules()
             self.category_mapping = self.load_category_mapping()
         except Exception as e:
-            logger.warning(f"Ошибка загрузки настроек из облака: {e}")
+            logger.warning(f"Ошибка загрузки из облака: {e}")
 
     def load_user_settings_from_cloud(self):
         if self.cloud_config.get('enabled'):
@@ -293,27 +291,9 @@ class HighVolumeAutoPartsCatalog:
     def determine_category_vectorized(self, name_series: pl.Series) -> pl.Series:
         name_lower = name_series.str.to_lowercase()
         categorization_expr = pl.when(pl.lit(False)).then(pl.lit(None))
-        # пользовательские правила
         for key, category in self.category_mapping.items():
             categorization_expr = categorization_expr.when(
                 name_lower.str.contains(key.lower())
-            ).then(pl.lit(category))
-        # стандартные
-        categories_map = {
-            'Фильтр': 'фильтр|filter',
-            'Тормоза': 'тормоз|brake|колодк|диск|суппорт',
-            'Подвеска': 'амортизатор|стойк|spring|подвеск|рычаг',
-            'Двигатель': 'двигатель|engine|свеч|поршень|клапан',
-            'Трансмиссия': 'трансмиссия|сцеплен|коробк|transmission',
-            'Электрика': 'аккумулятор|генератор|стартер|провод|ламп',
-            'Рулевое': 'рулевой|тяга|наконечник|steering',
-            'Выпуск': 'глушитель|катализатор|выхлоп|exhaust',
-            'Охлаждение': 'радиатор|вентилятор|термостат|cooling',
-            'Топливо': 'топливный|бензонасос|форсунк|fuel'
-        }
-        for category, pattern in categories_map.items():
-            categorization_expr = categorization_expr.when(
-                name_lower.str.contains(pattern, literal=False)
             ).then(pl.lit(category))
         return categorization_expr.otherwise(pl.lit('Разное')).alias('category')
 
@@ -392,7 +372,7 @@ class HighVolumeAutoPartsCatalog:
 
         return df
 
-    # --- Загрузка и обновление в базе ---
+    # --- Загрузка и обновление ---
     def upsert_data(self, table_name: str, df: pl.DataFrame, pk: list):
         if df.is_empty():
             return
@@ -1027,7 +1007,7 @@ class HighVolumeAutoPartsCatalog:
     def upload_settings_to_cloud(self):
         # Реализация загрузки настроек в облако
         try:
-            import boto3  # пример для S3
+            import boto3
             s3 = boto3.client('s3', region_name=self.cloud_config.get('region'))
             bucket = self.cloud_config.get('bucket')
             files = [
@@ -1044,7 +1024,6 @@ class HighVolumeAutoPartsCatalog:
             logger.error(f"Ошибка загрузки в облако: {e}")
             st.error(f"Ошибка загрузки в облако: {e}")
 
-    # --- Загрузка настроек из облака ---
     def load_settings_from_cloud(self):
         try:
             import boto3
@@ -1059,7 +1038,7 @@ class HighVolumeAutoPartsCatalog:
             for remote_name, local_path in files:
                 local_path.parent.mkdir(parents=True, exist_ok=True)
                 s3.download_file(bucket, remote_name, str(local_path))
-            # После загрузки - перезагружаем настройки
+            # После загрузки перезагружаем настройки
             self.cloud_config = self.load_cloud_config()
             self.price_rules = self.load_price_rules()
             self.exclusion_rules = self.load_exclusion_rules()
@@ -1101,27 +1080,23 @@ class HighVolumeAutoPartsCatalog:
                     weight /= 1000
                 st.success(f"Результат: Вес: {weight} {'г' if 'г' in direction else 'кг'}")
 
-    # --- Пользовательские колонки (сохранение) ---
+    # --- Пользовательские колонки ---
     def show_custom_columns_management(self):
         st.subheader("➕ Настройка пользовательских колонок")
         if not hasattr(self, 'custom_columns'):
             self.custom_columns = {}
-        # отображение текущих
         st.write("Текущие дополнительные колонки:")
         for col_name, val in self.custom_columns.items():
             st.write(f"- {col_name}: {val}")
-        # добавление
         col_name_input = st.text_input("Имя новой колонки")
         value_input = st.text_area("Значение по умолчанию (можно вставлять JSON или текст)", height=100)
         if st.button("➕ Добавить/Обновить"):
             if col_name_input:
-                # Можно сохранять как строку или объект (если JSON)
                 try:
                     val_obj = json.loads(value_input)
                 except:
                     val_obj = value_input
                 self.custom_columns[col_name_input] = val_obj
-                # После добавления сохраняем в облако
                 self.save_user_settings_to_cloud()
                 st.success(f"Колонка '{col_name_input}' добавлена/обновлена")
             else:
@@ -1153,7 +1128,6 @@ class HighVolumeAutoPartsCatalog:
             except Exception as e:
                 logger.warning(f"Ошибка загрузки настроек пользователя из облака: {e}")
 
-    # --- Вызов интерфейса ---
     def show_data_management(self):
         st.header("🔧 Управление данными")
         st.warning("⚠️ Операции необратимы!")
@@ -1169,7 +1143,7 @@ class HighVolumeAutoPartsCatalog:
                 "Облачная синхронизация",
                 "Настройка пользовательских колонок",
                 "Копировать данные от OE",
-                "Конвертация размеров и веса"
+                "Конвертация"
             ],
             format_func=lambda x: {
                 "Удалить по бренду": "🏭 Удалить все записи бренда",
@@ -1203,7 +1177,7 @@ class HighVolumeAutoPartsCatalog:
         elif management_option == "Конвертация":
             self.convert_dimensions_weight()
 
-# --- Вспомогательные методы для удаления и т.п. ---
+# --- Вспомогательные ---
 def _show_delete_by_brand(self):
     brand = st.text_input("Введите бренд для удаления")
     if st.button("Удалить по бренду") and brand:
