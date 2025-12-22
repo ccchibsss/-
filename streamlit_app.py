@@ -1,13 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 AutoParts Catalog application (Streamlit UI if available; CLI fallback otherwise).
-Features:
- - robust file parsing (polars/pandas fallback)
- - parsing weight/dimensions into numeric length/width/height (cm) and weight (kg)
- - DuckDB storage for fast queries
- - cloud sync helpers for s3/gcs/azure (best-effort; requires relevant SDKs + credentials)
- - export to CSV/Excel/Parquet
- - CLI mode when Streamlit is not installed
+Добавлены подробные комментарии на русском и улучшена визуализация Streamlit UI.
 """
 from __future__ import annotations
 
@@ -31,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 EXCEL_ROW_LIMIT = 1_000_000
 
-# Optional dependencies
+# Опциональные зависимости
 try:
     import polars as pl
 except Exception:
@@ -51,20 +45,16 @@ try:
 except Exception:
     st = None  # CLI mode fallback
 
-# --- Utility functions to handle polars/pandas reading/writing robustly ---
-
-
+# --- Утилиты чтения/конвертации ---
 def read_excel_any(path: str) -> "pl.DataFrame | pd.DataFrame | None":
     """
-    Try to read Excel into polars DataFrame if possible, otherwise pandas DataFrame.
-    Returns either polars.DataFrame or pandas.DataFrame (or None on failure).
+    Пытаемся прочитать Excel через polars, иначе через pandas.
+    Возвращаем polars.DataFrame (если доступен) или pandas.DataFrame.
     """
     if pl:
         try:
-            # polars may support read_excel depending on the build; try it first
             return pl.read_excel(path)
         except Exception:
-            # fallback to pandas
             pass
     if pd:
         try:
@@ -77,44 +67,50 @@ def read_excel_any(path: str) -> "pl.DataFrame | pd.DataFrame | None":
             return pdf
         except Exception as e:
             logger.debug("pandas.read_excel failed: %s", e)
-    logger.warning("Unable to read Excel file: %s (no suitable reader)", path)
+    logger.warning("Не удалось прочитать Excel: %s (нет подходящего ридера)", path)
     return None
 
 
 def ensure_pl_df(df: Any) -> "pl.DataFrame":
-    """Return a polars DataFrame whenever possible; otherwise convert pandas to polars."""
+    """Вернуть polars.DataFrame; если только pandas доступен - конвертировать."""
     if pl and isinstance(df, pl.DataFrame):
         return df
     if pd and isinstance(df, pd.DataFrame):
         if pl:
             return pl.from_pandas(df)
         else:
-            raise RuntimeError("polars not available; this code expects polars to be installed for full functionality.")
-    raise RuntimeError("Unsupported dataframe type or neither polars nor pandas available.")
+            raise RuntimeError("polars не установлен; требуется polars для полной работы.")
+    raise RuntimeError("Неподдерживаемый тип DataFrame или отсутствуют polars/pandas.")
 
 
 class HighVolumeAutoPartsCatalog:
+    """
+    Главный класс приложения: чтение, нормализация, загрузка в DuckDB, экспорт, облачная синхронизация.
+    Все публичные методы документированы и снабжены комментариями на русском.
+    """
     def __init__(self, data_dir: str = "./auto_parts_data"):
+        # Папка для данных (база, правила, конфиги)
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load configs and rules
+        # Загрузка конфигов и правил
         self.cloud_config = self.load_cloud_config()
         self.price_rules = self.load_price_rules()
         self.exclusion_rules = self.load_exclusion_rules()
         self.category_mapping = self.load_category_mapping()
 
-        # DB
+        # Подключение к duckdb (если доступно)
         self.db_path = self.data_dir / "catalog.duckdb"
         if duckdb is None:
-            logger.warning("duckdb not installed: database features will be disabled.")
+            logger.warning("duckdb не установлен: функции БД будут недоступны.")
             self.conn = None
         else:
             self.conn = duckdb.connect(database=str(self.db_path))
             self.setup_database()
 
-    # --- Config load/save ---
+    # --- Загрузка/сохранение конфигов и правил ---
     def load_cloud_config(self) -> Dict[str, Any]:
+        """Загрузить или создать конфиг облачной синхронизации."""
         path = self.data_dir / "cloud_config.json"
         default = {"enabled": False, "provider": "s3", "bucket": "", "region": "", "sync_interval": 3600, "last_sync": 0}
         if path.exists():
@@ -127,10 +123,12 @@ class HighVolumeAutoPartsCatalog:
             return default
 
     def save_cloud_config(self) -> None:
+        """Сохранить cloud_config в файл."""
         self.cloud_config["last_sync"] = int(time.time())
         (self.data_dir / "cloud_config.json").write_text(json.dumps(self.cloud_config, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def load_price_rules(self) -> Dict[str, Any]:
+        """Загрузить правила ценообразования (наценки, границы цен)."""
         path = self.data_dir / "price_rules.json"
         default = {"global_markup": 0.2, "brand_markups": {}, "min_price": 0.0, "max_price": 99999.0}
         if path.exists():
@@ -143,9 +141,11 @@ class HighVolumeAutoPartsCatalog:
             return default
 
     def save_price_rules(self) -> None:
+        """Сохранить price_rules."""
         (self.data_dir / "price_rules.json").write_text(json.dumps(self.price_rules, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def load_exclusion_rules(self) -> List[str]:
+        """Загрузить простые правила исключения категорий/слов."""
         path = self.data_dir / "exclusion_rules.txt"
         if path.exists():
             try:
@@ -158,9 +158,11 @@ class HighVolumeAutoPartsCatalog:
             return defaults
 
     def save_exclusion_rules(self) -> None:
+        """Сохранить exclusion_rules."""
         (self.data_dir / "exclusion_rules.txt").write_text("\n".join(self.exclusion_rules), encoding="utf-8")
 
     def load_category_mapping(self) -> Dict[str, str]:
+        """Загрузить сопоставление ключевых слов -> категории."""
         path = self.data_dir / "category_mapping.txt"
         default = {"Радиатор": "Охлаждение", "Шаровая опора": "Подвеска", "Фильтр масляный": "Фильтры", "Тормозные колодки": "Тормоза"}
         if path.exists():
@@ -178,10 +180,12 @@ class HighVolumeAutoPartsCatalog:
             return default
 
     def save_category_mapping(self) -> None:
+        """Сохранить category_mapping."""
         (self.data_dir / "category_mapping.txt").write_text("\n".join([f"{k}|{v}" for k, v in self.category_mapping.items()]), encoding="utf-8")
 
-    # --- Database setup ---
+    # --- Инициализация базы данных DuckDB ---
     def setup_database(self) -> None:
+        """Создать таблицы и индексы в DuckDB, если подключение доступно."""
         if self.conn is None:
             return
         try:
@@ -192,9 +196,10 @@ class HighVolumeAutoPartsCatalog:
             self.conn.execute("CREATE TABLE IF NOT EXISTS metadata (key VARCHAR PRIMARY KEY, value VARCHAR)")
             self.create_indexes()
         except Exception as e:
-            logger.exception("Cannot setup database: %s", e)
+            logger.exception("Не удалось настроить БД: %s", e)
 
     def create_indexes(self) -> None:
+        """Создать вспомогательные индексы для ускорения запросов."""
         if self.conn is None:
             return
         for sql in [
@@ -209,11 +214,15 @@ class HighVolumeAutoPartsCatalog:
             except Exception:
                 pass
 
-    # --- Normalization helpers (require polars) ---
+    # --- Нормализация ключей (требуется polars) ---
     @staticmethod
     def normalize_key(series: "pl.Series") -> "pl.Series":
+        """
+        Нормализовать строковый ключ: удалить апострофы, лишние символы,
+        привести к нижнему регистру и удалить лишние пробелы.
+        """
         if pl is None:
-            raise RuntimeError("polars required for normalize_key")
+            raise RuntimeError("polars требуется для normalize_key")
         return (series.fill_null("").cast(pl.Utf8)
                 .str.replace_all("'", "")
                 .str.replace_all(r"[^0-9A-Za-zА-Яа-яЁё`\-\s]", "")
@@ -222,8 +231,12 @@ class HighVolumeAutoPartsCatalog:
                 .str.to_lowercase())
 
     def determine_category_vectorized(self, name_series: "pl.Series") -> "pl.Series":
+        """
+        Попытка сопоставить категорию по названию (векторизовано для polars).
+        Использует пользовательскую mapping + набор паттернов.
+        """
         if pl is None:
-            raise RuntimeError("polars required for determine_category_vectorized")
+            raise RuntimeError("polars требуется для determine_category_vectorized")
         name_lower = name_series.str.to_lowercase()
         expr = pl.when(pl.lit(False)).then(pl.lit(None))
         for k, v in self.category_mapping.items():
@@ -244,12 +257,13 @@ class HighVolumeAutoPartsCatalog:
             expr = expr.when(name_lower.str.contains(pattern, literal=False)).then(pl.lit(cat))
         return expr.otherwise(pl.lit('Разное')).alias('category')
 
-    # --- Weight/dimensions parsing ---
+    # --- Разбор размеров и веса ---
     DIM_SEP_REGEX = re.compile(r'[x×*/\s,;]+', flags=re.IGNORECASE)
     WEIGHT_REGEX = re.compile(r'(\d+[.,]?\d*)\s*(kg|кг|g|гр|гр\.|g\.|grams|lb|lbs|фунт|oz|унц)', flags=re.IGNORECASE)
     UNIT_TRailing_REGEX = re.compile(r'(mm|мм|cm|см|m|м|in|inch|дюйм|дюйма)\b', flags=re.IGNORECASE)
 
     def _to_float(self, s: Any) -> Optional[float]:
+        """Преобразовать строку в float, поддерживая запятую."""
         if s is None:
             return None
         try:
@@ -260,14 +274,14 @@ class HighVolumeAutoPartsCatalog:
 
     def parse_dimension_string(self, s: Any) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
         """
-        Parse a dimension string and return (length_cm, width_cm, height_cm, weight_kg).
-        Supports mm/cm/m/in (converted to cm) and weights (kg/g/lb/oz).
+        Парсер строк типа "10x20x5 cm, 1.2kg" -> (length_cm, width_cm, height_cm, weight_kg).
+        Поддерживает mm/cm/m/in и различные единицы веса.
         """
         if s is None:
             return (None, None, None, None)
         text = str(s).lower().strip()
 
-        # Extract weight if present
+        # Выделим вес (если есть)
         weight_kg: Optional[float] = None
         wmatch = self.WEIGHT_REGEX.search(text)
         if wmatch:
@@ -283,7 +297,7 @@ class HighVolumeAutoPartsCatalog:
                 elif unit in ('oz', 'унц'):
                     weight_kg = val * 0.0283495231
 
-        # Remove weight part from text
+        # Уберем часть с весом из строки размеров
         if wmatch:
             text_dims = (text[:wmatch.start()] + text[wmatch.end():]).strip()
         else:
@@ -292,11 +306,11 @@ class HighVolumeAutoPartsCatalog:
         if not text_dims:
             return (None, None, None, weight_kg)
 
-        # get trailing unit for dims if any
+        # Попытаемся понять единицы измерения
         trailing_unit_match = self.UNIT_TRailing_REGEX.search(text_dims)
         unit = trailing_unit_match.group(1).lower() if trailing_unit_match else None
 
-        # split by common separators
+        # Разделим по распространённым разделителям
         parts = re.split(r'[x×*/,;]+', text_dims)
         nums: List[float] = []
         for part in parts:
@@ -307,7 +321,7 @@ class HighVolumeAutoPartsCatalog:
                 if v is not None:
                     nums.append(v)
 
-        # fallback: any numbers in string
+        # Фоллбэк: все числа из строки
         if not nums:
             all_nums = re.findall(r'\d+[.,]?\d*', text_dims)
             for f in all_nums:
@@ -315,8 +329,8 @@ class HighVolumeAutoPartsCatalog:
                 if v is not None:
                     nums.append(v)
 
-        # Determine multiplier to convert to cm
-        mul = 1.0  # default assume cm
+        # Множитель для перевода в сантиметры
+        mul = 1.0
         if unit:
             u = unit.lower()
             if u in ('mm', 'мм'):
@@ -346,11 +360,10 @@ class HighVolumeAutoPartsCatalog:
 
     def parse_dimensions_series(self, series: Any) -> "pl.DataFrame":
         """
-        Given a polars Series (or list-like), parse each entry and return a polars DataFrame
-        with columns parsed_length, parsed_width, parsed_height, parsed_weight.
+        Для polars.Series: распарсить столбец dimensions_str и вернуть DataFrame с parsed_* колонками.
         """
         if pl is None:
-            raise RuntimeError("polars required for parse_dimensions_series")
+            raise RuntimeError("polars требуется для parse_dimensions_series")
         if hasattr(series, "to_list"):
             items = series.to_list()
         elif isinstance(series, (list, tuple)):
@@ -365,8 +378,12 @@ class HighVolumeAutoPartsCatalog:
             "parsed_weight": [r[3] for r in results]
         })
 
-    # --- File detection and preparation ---
+    # --- Обнаружение и нормализация столбцов файлов ---
     def detect_columns(self, actual_cols: List[str], expected_cols: List[str]) -> Dict[str, str]:
+        """
+        Попытаться сопоставить реальные заголовки столбцов файла с ожидаемыми.
+        Возвращает mapping {оригинальное_имя: ожидаемое_имя}.
+        """
         variants = {
             'oe_number': ['oe номер', 'oe', 'оe', 'номер', 'code', 'OE'],
             'artikul': ['артикул', 'article', 'sku'],
@@ -394,14 +411,15 @@ class HighVolumeAutoPartsCatalog:
         return mapping
 
     def clean_values(self, series: "pl.Expr | pl.Series"):
+        """Универсальная очистка строковых значений (удаление лишних символов)."""
         if pl is None:
-            raise RuntimeError("polars required for clean_values")
+            raise RuntimeError("polars требуется для clean_values")
         return series.fill_null("").cast(pl.Utf8).str.replace_all("'", "").str.replace_all(r"[^0-9A-Za-zА-Яа-яЁё`\-\s]", "").str.replace_all(r"\s+", " ").str.strip_chars()
 
     def read_and_prepare_file(self, path: str, ftype: str) -> "pl.DataFrame":
         """
-        Read an Excel file and normalize columns according to expected schema for ftype.
-        Returns a polars DataFrame (empty if nothing to do).
+        Прочитать Excel файл и привести его к ожидаемой схеме для типа ftype.
+        Возвращает polars.DataFrame (пустой, если ничего не удалось).
         """
         raw = read_excel_any(path)
         if raw is None:
@@ -412,7 +430,7 @@ class HighVolumeAutoPartsCatalog:
             if pl:
                 df = pl.from_pandas(raw)
             else:
-                raise RuntimeError("polars required to continue")
+                raise RuntimeError("polars требуется для продолжения")
         else:
             return pl.DataFrame() if pl else None
 
@@ -430,11 +448,11 @@ class HighVolumeAutoPartsCatalog:
         expected = schemas.get(ftype, [])
         colmap = self.detect_columns(df.columns, expected)
         if not colmap:
-            logger.info("No matching columns detected for %s in %s", ftype, path)
+            logger.info("Не обнаружены сопоставимые колонки для %s в %s", ftype, path)
             return pl.DataFrame()
         df = df.rename(colmap)
 
-        # Clean and normalize keys
+        # Очистка текстовых полей и нормализация ключей
         for c in ['artikul', 'brand', 'oe_number']:
             if c in df.columns:
                 df = df.with_columns(self.clean_values(pl.col(c)).alias(c))
@@ -442,7 +460,7 @@ class HighVolumeAutoPartsCatalog:
             if c in df.columns:
                 df = df.with_columns(self.normalize_key(pl.col(c)).alias(f"{c}_norm"))
 
-        # If dimensions_str present, parse into numeric fields when numeric fields are missing
+        # Если есть dimensions_str — попытка спарсить численные поля
         if 'dimensions_str' in df.columns:
             try:
                 parsed = self.parse_dimensions_series(df['dimensions_str'])
@@ -470,17 +488,21 @@ class HighVolumeAutoPartsCatalog:
 
         return df
 
-    # --- Upsert and DB operations ---
+    # --- Вставка/обновление данных в БД (upsert) ---
     def upsert_data(self, table: str, df: "pl.DataFrame", pk: List[str]) -> None:
+        """
+        Upsert: временная регистрация таблицы в DuckDB, удаление конфликтующих PK и вставка новых строк.
+        Хорошо работает для больших DataFrame благодаря DuckDB.
+        """
         if df is None:
             return
         if pl is None:
-            raise RuntimeError("polars required for upsert_data")
+            raise RuntimeError("polars требуется для upsert_data")
         if df.is_empty():
             return
         df = df.unique(keep="first")
         if self.conn is None:
-            logger.info("duckdb not available: skipping upsert to %s (would write %d rows)", table, len(df))
+            logger.info("duckdb недоступен: пропуск upsert в %s (rows=%d)", table, len(df))
             return
         temp_name = f"temp_{table}_{int(time.time())}"
         try:
@@ -492,6 +514,7 @@ class HighVolumeAutoPartsCatalog:
                     WHERE ({pk_csv}) IN (SELECT {pk_csv} FROM {temp_name});
                 """)
             except Exception:
+                # альтернативный путь при несовместимости SQL диалекта
                 conds = " OR ".join([f"{table}.{c} = t.{c}" for c in pk])
                 self.conn.execute(f"""
                     DELETE FROM {table} WHERE EXISTS (SELECT 1 FROM {temp_name} t WHERE {conds});
@@ -506,6 +529,7 @@ class HighVolumeAutoPartsCatalog:
                 pass
 
     def upsert_prices(self, df: "pl.DataFrame") -> None:
+        """Специальная обработка таблицы цен: нормализация, фильтрация по min/max и upsert."""
         if df is None or df.is_empty():
             return
         if 'artikul' in df.columns and 'brand' in df.columns:
@@ -518,11 +542,15 @@ class HighVolumeAutoPartsCatalog:
 
     def process_and_load_data(self, dataframes: Dict[str, "pl.DataFrame"]):
         """
-        Main data processing pipeline: OE, cross references, prices, parts assembly (dimensions, images, barcodes).
+        Основной pipeline обработки:
+         - OE
+         - Cross references
+         - Prices
+         - Сборка parts из ключевых файлов (oe, barcode, images, dimensions)
         """
         if pl is None:
             raise RuntimeError("polars required for processing")
-        logger.info("Start processing and loading data...")
+        logger.info("Начинаем обработку и загрузку данных...")
 
         # OE
         if 'oe' in dataframes:
@@ -546,9 +574,9 @@ class HighVolumeAutoPartsCatalog:
             df_price = dataframes['prices']
             if not df_price.is_empty():
                 self.upsert_prices(df_price)
-                logger.info("Prices upserted: %d", len(df_price))
+                logger.info("Цены записаны: %d", len(df_price))
 
-        # parts assembly
+        # parts assembly — объединяем доступные данные по артикулам
         key_files = {k: v for k, v in dataframes.items() if k in ['oe', 'barcode', 'images', 'dimensions']}
         if key_files:
             all_parts = pl.concat([v.select(['artikul', 'artikul_norm', 'brand', 'brand_norm']) for v in key_files.values() if 'artikul_norm' in v.columns]).filter(pl.col('artikul_norm') != "").unique(subset=['artikul_norm', 'brand_norm'])
@@ -570,8 +598,8 @@ class HighVolumeAutoPartsCatalog:
         else:
             all_parts = pl.DataFrame()
 
+        # Привести типы, попытаться докопать недостающие размеры, собрать финальную таблицу parts
         if not all_parts.is_empty():
-            # multiplicity
             if 'multiplicity' not in all_parts.columns:
                 all_parts = all_parts.with_columns(pl.lit(1).cast(pl.Int32).alias('multiplicity'))
             else:
@@ -588,7 +616,7 @@ class HighVolumeAutoPartsCatalog:
             if 'dimensions_str' not in all_parts.columns:
                 all_parts = all_parts.with_columns(pl.lit(None).cast(pl.Utf8).alias('dimensions_str'))
 
-            # Try bulk parse missing numeric dims from dimensions_str
+            # Попытка массового парсинга размеров
             if 'dimensions_str' in all_parts.columns:
                 try:
                     parsed = self.parse_dimensions_series(all_parts['dimensions_str'])
@@ -601,7 +629,7 @@ class HighVolumeAutoPartsCatalog:
                 except Exception as e:
                     logger.debug("bulk parse dims failed: %s", e)
 
-            # Compose dimensions_str where missing
+            # Составим dimensions_str если его нет
             all_parts = all_parts.with_columns([
                 pl.col('length').cast(pl.Utf8).fill_null('').alias('_length'),
                 pl.col('width').cast(pl.Utf8).fill_null('').alias('_width'),
@@ -618,6 +646,7 @@ class HighVolumeAutoPartsCatalog:
             if 'brand' not in all_parts.columns:
                 all_parts = all_parts.with_columns(pl.lit('').alias('brand'))
 
+            # Краткое описание — строка, которую можно показывать в экспорте/интерфейсе
             all_parts = all_parts.with_columns(
                 description=pl.concat_str([
                     'Артикул: ', pl.col('artikul'), ', ',
@@ -631,10 +660,11 @@ class HighVolumeAutoPartsCatalog:
             self.upsert_data('parts', df_final, ['artikul_norm', 'brand_norm'])
             logger.info("Parts upserted: %d", len(df_final))
         else:
-            logger.info("No parts assembled from provided files.")
+            logger.info("Нет собранных артикулов из предоставленных файлов.")
 
-    # --- Export building and helpers ---
+    # --- Построение SQL запроса для экспорта ---
     def _get_brand_markups_sql(self) -> str:
+        """Сгенерировать временную таблицу brand_markups для использования в SQL."""
         rows = []
         for b, m in self.load_price_rules().get('brand_markups', {}).items():
             safe_b = b.replace("'", "''")
@@ -642,13 +672,9 @@ class HighVolumeAutoPartsCatalog:
         return " UNION ALL ".join(rows) if rows else "SELECT NULL AS brand, 0 AS markup LIMIT 0"
 
     def build_export_query(self, selected_columns: Optional[List[str]] = None, include_prices: bool = True, apply_markup: bool = True) -> str:
-        # This method returns a complex SQL. Keep largely unchanged from prior implementation.
+        """Сформировать комплексный SQL-запрос для экспорта (описание и агрегирование данных)."""
         desc_text = ("Состояние товара: новый (в упаковке). Высококачественные автозапчасти и автотовары — надежное решение для вашего автомобиля. "
-                     "Обеспечьте безопасность, долговечность и высокую производительность вашего авто с помощью нашего широкого ассортимента оригинальных и совместимых автозапчастей. "
-                     "В нашем каталоге вы найдете тормозные системы, фильтры (масляные, воздушные, салонные), свечи зажигания, расходные материалы, автохимию, электроматериалы, автомасла, инструмент, "
-                     "а также другие комплектующие, полностью соответствующие стандартам качества и безопасности. "
-                     "Мы гарантируем быструю доставку, выгодные цены и профессиональную консультацию для любого клиента — автолюбителя, специалиста или автосервиса. "
-                     "Выбирайте только лучшее — надежность и качество от ведущих производителей.")
+                     "Обеспечьте безопасность, долговечность и высокую производительность вашего авто с помощью нашего широкого ассортимента.")
         brand_markups_sql = self._get_brand_markups_sql()
 
         select_parts = []
@@ -777,21 +803,23 @@ class HighVolumeAutoPartsCatalog:
         query = f"{ctes} SELECT {select_clause} FROM RankedData r CROSS JOIN DescriptionTemplate dt {join_price} WHERE r.rn=1 ORDER BY r.brand, r.artikul"
         return query
 
+    # --- Экспорт в файлы ---
     def export_to_csv(self, path: str, selected_columns: Optional[List[str]] = None, include_prices: bool = True, apply_markup: bool = True) -> bool:
+        """Экспортировать результат запроса в CSV (с BOM и разделителем ';')."""
         if self.conn is None:
-            logger.error("duckdb not available: cannot export.")
+            logger.error("duckdb недоступен: экспорт невозможен.")
             return False
         try:
             total = self.conn.execute("SELECT COUNT(*) FROM (SELECT DISTINCT artikul_norm, brand_norm FROM parts)").fetchone()[0]
             if total == 0:
-                logger.info("No data for export.")
+                logger.info("Нет данных для экспорта.")
                 return False
             query = self.build_export_query(selected_columns, include_prices, apply_markup)
             df = self.conn.execute(query).pl()
             if pd:
                 pdf = df.to_pandas()
             else:
-                raise RuntimeError("pandas required to write CSV")
+                raise RuntimeError("pandas требуется для записи CSV")
             for c in ["Длинна", "Ширина", "Высота", "Вес", "Длинна/Ширина/Высота"]:
                 if c in pdf.columns:
                     pdf[c] = pdf[c].astype(str).replace({'nan': ''})
@@ -809,11 +837,12 @@ class HighVolumeAutoPartsCatalog:
             return False
 
     def export_to_excel(self, path: str, selected_columns: Optional[List[str]] = None, include_prices: bool = True, apply_markup: bool = True) -> bool:
+        """Экспортировать в Excel (openpyxl). Если много строк - разбить по листам."""
         if self.conn is None:
-            logger.error("duckdb not available: cannot export.")
+            logger.error("duckdb недоступен: экспорт невозможен.")
             return False
         if pd is None:
-            logger.error("pandas required for Excel export.")
+            logger.error("pandas требуется для экспорта в Excel.")
             return False
         try:
             query = self.build_export_query(selected_columns, include_prices, apply_markup)
@@ -837,8 +866,9 @@ class HighVolumeAutoPartsCatalog:
             return False
 
     def export_to_parquet(self, path: str, selected_columns: Optional[List[str]] = None, include_prices: bool = True, apply_markup: bool = True) -> bool:
+        """Экспорт в Parquet (через polars Arrow таблицу)."""
         if self.conn is None:
-            logger.error("duckdb not available: cannot export.")
+            logger.error("duckdb недоступен: экспорт невозможен.")
             return False
         try:
             query = self.build_export_query(selected_columns, include_prices, apply_markup)
@@ -850,10 +880,11 @@ class HighVolumeAutoPartsCatalog:
             logger.exception("export_to_parquet failed: %s", e)
             return False
 
-    # --- Management ---
+    # --- Управление записями ---
     def delete_by_brand(self, brand_norm: str) -> int:
+        """Удалить артикулы по нормализованному бренду и очистить кроссы без частей."""
         if self.conn is None:
-            logger.warning("duckdb not available: cannot delete.")
+            logger.warning("duckdb недоступен: удаление невозможно.")
             return 0
         try:
             cnt = self.conn.execute("SELECT COUNT(*) FROM parts WHERE brand_norm= ?", [brand_norm]).fetchone()[0]
@@ -866,8 +897,9 @@ class HighVolumeAutoPartsCatalog:
             return 0
 
     def delete_by_artikul(self, artikul_norm: str) -> int:
+        """Удалить артикулы по нормализованному артикулу."""
         if self.conn is None:
-            logger.warning("duckdb not available: cannot delete.")
+            logger.warning("duckdb недоступен: удаление невозможно.")
             return 0
         try:
             cnt = self.conn.execute("SELECT COUNT(*) FROM parts WHERE artikul_norm= ?", [artikul_norm]).fetchone()[0]
@@ -879,13 +911,17 @@ class HighVolumeAutoPartsCatalog:
             logger.exception("delete_by_artikul failed: %s", e)
             return 0
 
-    # --- Cloud sync (best-effort) ---
+    # --- Облачная синхронизация (best-effort) ---
     def perform_cloud_sync(self) -> None:
+        """
+        Попытаться загрузить DB и конфиги в указанный облачный провайдер.
+        Поддерживаются: s3, gcs, azure.
+        """
         if not self.cloud_config.get('enabled'):
-            logger.info("Cloud sync disabled in config.")
+            logger.info("Cloud sync отключен в конфиге.")
             return
         if not self.cloud_config.get('bucket'):
-            logger.warning("Cloud bucket/container not specified.")
+            logger.warning("Cloud bucket/container не указан.")
             return
         provider = self.cloud_config.get('provider', 's3')
         bucket = self.cloud_config.get('bucket')
@@ -896,7 +932,6 @@ class HighVolumeAutoPartsCatalog:
         cfg = self.data_dir / "cloud_config.json"
         if cfg.exists():
             files_to_upload.append((str(cfg), cfg.name))
-        # save current source
         app_src_path = self.data_dir / "app_source.py"
         try:
             src = None
@@ -911,7 +946,7 @@ class HighVolumeAutoPartsCatalog:
                 app_src_path.write_text(src, encoding='utf-8')
                 files_to_upload.append((str(app_src_path), app_src_path.name))
         except Exception as e:
-            logger.debug("Could not write source: %s", e)
+            logger.debug("Не удалось сохранить исходник: %s", e)
 
         success = True
         if provider == 's3':
@@ -948,7 +983,7 @@ class HighVolumeAutoPartsCatalog:
                 from azure.storage.blob import BlobServiceClient
                 conn_str = os.environ.get('AZURE_STORAGE_CONNECTION_STRING')
                 if not conn_str:
-                    raise RuntimeError("AZURE_STORAGE_CONNECTION_STRING not set")
+                    raise RuntimeError("AZURE_STORAGE_CONNECTION_STRING не задан")
                 service = BlobServiceClient.from_connection_string(conn_str)
                 container_client = service.get_container_client(bucket)
                 try:
@@ -972,8 +1007,9 @@ class HighVolumeAutoPartsCatalog:
             self.cloud_config['last_sync'] = int(time.time())
             self.save_cloud_config()
 
-    # --- Utilities for CLI/Streamlit outputs ---
+    # --- Утилиты для CLI/Streamlit интерфейсов ---
     def stats(self) -> Dict[str, int]:
+        """Вернуть количество записей в основных таблицах."""
         if self.conn is None:
             return {"parts": 0, "oe": 0, "prices": 0}
         try:
@@ -985,6 +1021,9 @@ class HighVolumeAutoPartsCatalog:
             return {"parts": 0, "oe": 0, "prices": 0}
 
     def merge_all_data_parallel(self, file_paths: Dict[str, str], max_workers: int = 4) -> Dict[str, "pl.DataFrame"]:
+        """
+        Параллельное чтение и подготовка файлов. Возвращает словарь {тип: DataFrame}.
+        """
         results: Dict[str, "pl.DataFrame"] = {}
         if not file_paths:
             return results
@@ -1006,8 +1045,9 @@ class HighVolumeAutoPartsCatalog:
 
 # --- CLI runner ---
 def cli_main():
+    """Точка входа для CLI: импорт/экспорт/статистика/синхрон и удаление."""
     parser = argparse.ArgumentParser(description="AutoParts Catalog CLI")
-    sub = parser.add_subparsers(dest="cmd")  # do not force required to allow graceful help
+    sub = parser.add_subparsers(dest="cmd")  # не делаем required, чтобы печатался help
 
     p_import = sub.add_parser("import", help="Import files into DB")
     p_import.add_argument("--oe", help="OE file path (.xlsx)")
@@ -1031,7 +1071,7 @@ def cli_main():
     p_delete.add_argument("--brand", help="Brand name")
     p_delete.add_argument("--artikul", help="Artikul")
 
-    # If no args provided, print help and exit gracefully
+    # Если аргументы отсутствуют — показать help
     if len(sys.argv) <= 1:
         parser.print_help()
         return
@@ -1039,7 +1079,6 @@ def cli_main():
     try:
         args = parser.parse_args()
     except SystemExit:
-        # Argparse may call SystemExit on bad args; handle gracefully
         return
 
     catalog = HighVolumeAutoPartsCatalog()
@@ -1095,22 +1134,44 @@ def cli_main():
             logger.info("Deleted %d records for artikul '%s'", cnt, args.artikul)
 
 
-# --- Streamlit UI (best-effort) ---
+# --- Streamlit UI (улучшенная визуализация) ---
 def run_streamlit_ui():
+    """
+    Запустить Streamlit UI с улучшенной визуализацией:
+     - метрики вверху (кол-во parts/oe/prices)
+     - прогрессбар при импорте
+     - предпросмотр загруженных файлов
+     - удобный экспорт и загрузка файлов
+     - настройка облачной синхронизации
+    """
     if st is None:
-        logger.error("Streamlit not available.")
+        logger.error("Streamlit не установлен.")
         return
+
     st.set_page_config(page_title="AutoParts Catalog 10M+", layout="wide", page_icon="🚗")
     st.title("🚗 AutoParts Catalog 10M+")
-    st.markdown("### Платформа для больших каталогов автозапчастей")
+    st.markdown("Платформа для больших каталогов автозапчастей — загрузка, обработка, экспорт и синхронизация.")
 
     catalog = HighVolumeAutoPartsCatalog()
 
+    # Боковая панель: быстрая навигация и инструкции
     st.sidebar.title("🧭 Меню")
-    option = st.sidebar.radio("Выберите раздел", ["Загрузка данных", "Экспорт", "Статистика", "Управление"])
+    option = st.sidebar.radio("Выберите раздел", ["Загрузка данных", "Экспорт", "Статистика", "Управление", "Конфигурация"])
 
+    # Верхняя панель с метриками
+    stats = catalog.stats()
+    col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
+    col1.metric("Артикулы (parts)", stats.get("parts", 0), delta=None)
+    col2.metric("OE номера", stats.get("oe", 0), delta=None)
+    col3.metric("Цены", stats.get("prices", 0), delta=None)
+    last_sync = catalog.cloud_config.get("last_sync", 0)
+    last_sync_display = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(last_sync)) if last_sync else "—"
+    col4.markdown(f"**Последняя синхронизация:** {last_sync_display}")
+
+    # Раздел: Загрузка файлов
     if option == "Загрузка данных":
         st.header("📥 Загрузка данных")
+        st.info("Загрузите Excel-файлы с данными. Система попытается автоматически распознать колонки.")
         cols = st.columns(2)
         with cols[0]:
             oe_file = st.file_uploader("Основные данные (OE)", type=['xlsx'])
@@ -1120,54 +1181,110 @@ def run_streamlit_ui():
             weight_dims_file = st.file_uploader("Вес и габариты", type=['xlsx'])
             images_file = st.file_uploader("Изображения", type=['xlsx'])
             prices_file = st.file_uploader("Цены", type=['xlsx'])
+
         uploaded = {'oe': oe_file, 'cross': cross_file, 'barcode': barcode_file, 'dimensions': weight_dims_file, 'images': images_file, 'prices': prices_file}
-        if st.button("Обработать и загрузить"):
-            paths = {}
+
+        # Отображение предпросмотра загруженных файлов
+        exp_cols = st.expander("Предпросмотр загруженных файлов (первые 5 строк)")
+        with exp_cols:
             for k, v in uploaded.items():
                 if v:
+                    try:
+                        # Попробуем прочитать временно через pandas для превью
+                        if pd:
+                            v.seek(0)
+                            pdf = pd.read_excel(v)
+                            st.subheader(k)
+                            st.dataframe(pdf.head(5))
+                        else:
+                            st.write(f"{k}: файл загружен")
+                    except Exception as e:
+                        st.write(f"{k}: не удалось показать превью ({e})")
+
+        if st.button("Обработать и загрузить"):
+            paths = {}
+            # Сохраняем файлы на диск и даём понятные имена
+            for k, file_obj in uploaded.items():
+                if file_obj:
                     p = catalog.data_dir / f"{k}_{int(time.time())}.xlsx"
                     with open(p, 'wb') as f:
-                        f.write(v.read())
+                        f.write(file_obj.read())
                     paths[k] = str(p)
-            if paths:
-                with st.spinner("Обработка файлов..."):
-                    df_dict = catalog.merge_all_data_parallel(paths)
+
+            if not paths:
+                st.warning("Загрузите хотя бы один файл для обработки.")
+            else:
+                # Визуальный прогресс при чтении/обработке
+                with st.spinner("Чтение и подготовка файлов..."):
+                    progress = st.progress(0)
+                    df_dict = {}
+                    items = list(paths.items())
+                    total = max(1, len(items))
+                    for i, (k, p) in enumerate(items, start=1):
+                        try:
+                            d = catalog.read_and_prepare_file(p, k)
+                            if d is not None and not d.is_empty():
+                                df_dict[k] = d
+                                st.success(f"Файл {k} прочитан: {len(d)} строк")
+                            else:
+                                st.info(f"Файл {k}: нет распознанных данных")
+                        except Exception as e:
+                            st.error(f"Ошибка чтения {k}: {e}")
+                        progress.progress(int(i / total * 100))
+                    progress.empty()
+                # Загрузка в базу данных
                 with st.spinner("Загрузка в базу..."):
                     catalog.process_and_load_data(df_dict)
-                st.success("Загрузка завершена")
-            else:
-                st.warning("Загрузите хотя бы один файл")
+                st.success("Обработка и загрузка завершены.")
+                # Обновим метрики в UI
+                s = catalog.stats()
+                st.metric("Артикулы (parts)", s.get("parts", 0))
+
+    # Раздел: Экспорт
     elif option == "Экспорт":
         st.header("📤 Экспорт данных")
+        st.info("Сформируйте файл экспорта. Вы можете выбрать столбцы и формат.")
         total = catalog.stats().get("parts", 0)
-        st.info(f"Всего: {total}")
         if total == 0:
-            st.warning("Нет данных")
+            st.warning("Нет данных для экспорта.")
         else:
-            format_ = st.radio("Формат", ["CSV", "Excel", "Parquet"])
-            selected_columns = st.multiselect("Колонки", ["Артикул бренда", "Бренд", "Наименование", "Применимость", "Описание", "Категория товара", "Кратность", "Длинна", "Ширина", "Высота", "Вес", "Длинна/Ширина/Высота", "OE номер", "аналоги", "Ссылка на изображение", "Цена", "Валюта"])
+            format_ = st.selectbox("Формат", ["CSV", "Excel", "Parquet"])
+            default_cols = ["Артикул бренда", "Бренд", "Наименование", "Применимость", "Описание", "Категория товара", "Кратность", "Длинна", "Ширина", "Высота", "Вес", "Длинна/Ширина/Высота", "OE номер", "аналоги", "Ссылка на изображение", "Цена", "Валюта"]
+            selected_columns = st.multiselect("Колонки (оставьте пустым для всех)", default_cols)
             include_prices = st.checkbox("Включить цены", value=True)
             apply_markup = st.checkbox("Применить наценку", value=True, disabled=not include_prices)
+            out_name = st.text_input("Имя файла (без пути)", f"export_{int(time.time())}.{format_.lower()}")
+            out_path = catalog.data_dir / out_name
             if st.button("🚀 Экспортировать"):
-                path = catalog.data_dir / f"export.{format_.lower()}"
                 with st.spinner("Генерация файла..."):
                     if format_ == "CSV":
-                        catalog.export_to_csv(str(path), selected_columns if selected_columns else None, include_prices, apply_markup)
+                        ok = catalog.export_to_csv(str(out_path), selected_columns if selected_columns else None, include_prices, apply_markup)
                     elif format_ == "Excel":
-                        catalog.export_to_excel(str(path), selected_columns if selected_columns else None, include_prices, apply_markup)
+                        ok = catalog.export_to_excel(str(out_path), selected_columns if selected_columns else None, include_prices, apply_markup)
                     else:
-                        catalog.export_to_parquet(str(path), selected_columns if selected_columns else None, include_prices, apply_markup)
-                with open(path, "rb") as f:
-                    st.download_button("⬇️ Скачать файл", f, file_name=path.name)
+                        ok = catalog.export_to_parquet(str(out_path), selected_columns if selected_columns else None, include_prices, apply_markup)
+                if ok and out_path.exists():
+                    st.success(f"Экспорт сохранён: {out_path}")
+                    with open(out_path, "rb") as f:
+                        st.download_button("⬇️ Скачать файл", f, file_name=out_path.name)
+                else:
+                    st.error("Экспорт завершился с ошибкой. Проверьте логи.")
+
+    # Раздел: Статистика (визуальная)
     elif option == "Статистика":
         st.header("📊 Статистика")
         s = catalog.stats()
-        st.info(f"Записей в parts (уникальные артикули+бренд): {s['parts']}")
-        st.info(f"OE номеров: {s['oe']}")
-        st.info(f"Цен: {s['prices']}")
+        st.subheader("Общие показатели")
+        cols = st.columns(3)
+        cols[0].metric("Уникальные артикула+бренд", s["parts"])
+        cols[1].metric("Количество OE", s["oe"])
+        cols[2].metric("Количество цен", s["prices"])
+        st.markdown("**Замечания:** отображаются только загруженные в текущую базу данные.")
+
+    # Раздел: Управление (удаление, синхронизация)
     elif option == "Управление":
         st.header("🔧 Управление данными")
-        st.warning("⚠️ Операции необратимы!")
+        st.warning("⚠️ Операции необратимы! Делайте резервные копии перед удалением.")
         action = st.selectbox("Действие", ["Удалить по бренду", "Удалить по артикулу", "Облачная синхронизация"])
         if action == "Удалить по бренду":
             try:
@@ -1182,7 +1299,7 @@ def run_streamlit_ui():
                 if st.button("Удалить бренд"):
                     norm_b = HighVolumeAutoPartsCatalog.normalize_key(pl.Series([brand]))[0] if pl else re.sub(r"[^0-9A-Za-zА-Яа-яЁё`\-\s]", "", brand).strip().lower()
                     cnt = catalog.delete_by_brand(norm_b)
-                    st.success(f"Удалено {cnt}")
+                    st.success(f"Удалено {cnt} записей для бренда '{brand}'")
             else:
                 st.info("Нет брендов в базе")
         elif action == "Удалить по артикулу":
@@ -1191,17 +1308,47 @@ def run_streamlit_ui():
                 if artikul:
                     norm_a = HighVolumeAutoPartsCatalog.normalize_key(pl.Series([artikul]))[0] if pl else re.sub(r"[^0-9A-Za-zА-Яа-яЁё`\-\s]", "", artikul).strip().lower()
                     cnt = catalog.delete_by_artikul(norm_a)
-                    st.success(f"Удалено {cnt}")
+                    st.success(f"Удалено {cnt} записей для артикула '{artikul}'")
         elif action == "Облачная синхронизация":
             st.write("Параметры синхронизации в файле:", str(catalog.data_dir / "cloud_config.json"))
+            st.json(catalog.cloud_config)
             if st.button("Синхронизировать сейчас"):
-                catalog.perform_cloud_sync()
-                st.success("Синхронизация выполнена (см. логи)")
+                with st.spinner("Выполняется синхронизация..."):
+                    catalog.perform_cloud_sync()
+                st.success("Синхронизация выполнена (см. логи).")
+                # Обновим видимую метрику last sync
+                catalog = HighVolumeAutoPartsCatalog()  # перезагрузить конфиг
+                st.experimental_rerun()
+
+    # Раздел: Конфигурация (редактирование простых правил)
+    elif option == "Конфигурация":
+        st.header("⚙️ Конфигурация")
+        st.subheader("Правила наценок")
+        pr = catalog.load_price_rules()
+        st.write("Global markup (доля):", pr.get("global_markup", 0))
+        new_markup = st.number_input("Global markup (например 0.2 = 20%)", value=float(pr.get("global_markup", 0.2)), step=0.01)
+        if st.button("Сохранить наценку"):
+            pr["global_markup"] = float(new_markup)
+            catalog.price_rules = pr
+            catalog.save_price_rules()
+            st.success("Правила наценки сохранены.")
+
+        st.subheader("Category mapping")
+        cm_text = "\n".join([f"{k}|{v}" for k, v in catalog.category_mapping.items()])
+        edited = st.text_area("Mapping (ключ|категория по строкам)", value=cm_text, height=200)
+        if st.button("Сохранить mapping"):
+            new_map = {}
+            for line in edited.splitlines():
+                if "|" in line:
+                    k, v = line.split("|", 1)
+                    new_map[k.strip()] = v.strip()
+            catalog.category_mapping = new_map
+            catalog.save_category_mapping()
+            st.success("Mapping сохранён.")
 
 # --- Main entrypoint ---
 if __name__ == "__main__":
-    # If run under streamlit, prefer UI; else CLI
-    # Detect streamlit run by presence of STREAMLIT_SERVER or by st module availability when running with 'streamlit run'
+    # Если запускается через streamlit — предпочесть UI, иначе CLI
     if st is not None and ("STREAMLIT_SERVER" in os.environ or any("streamlit" in a.lower() for a in sys.argv)):
         try:
             run_streamlit_ui()
