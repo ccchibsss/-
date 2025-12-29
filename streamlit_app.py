@@ -496,32 +496,31 @@ class HighVolumeAutoPartsCatalog:
         if parts_df is not None and not parts_df.is_empty():
             if 'multiplicity' not in parts_df.columns:
                 parts_df = parts_df.with_columns(
-                    multiplicity=pl.lit(1).cast(pl.Int32))
+                    pl.lit(1).cast(pl.Int32))
             else:
                 parts_df = parts_df.with_columns(
                     pl.col('multiplicity').fill_null(1).cast(pl.Int32))
 
-            # Обработка размеров с форматированием до 2 знаков
             for col in ['length', 'width', 'height']:
-                if col in parts_df.columns:
+                if col not in parts_df.columns:
                     parts_df = parts_df.with_columns(
-                        pl.col(col).cast(pl.Float64).round(2).apply(lambda x: f"{x:.2f}" if x is not None else "").alias(col)
-                    )
+                        pl.lit(None).cast(pl.Float64).alias(col))
 
             if 'dimensions_str' not in parts_df.columns:
                 parts_df = parts_df.with_columns(
                     dimensions_str=pl.lit(None).cast(pl.Utf8))
 
-            parts_df = parts_df.with_columns(
-                [
-                    pl.col('length').cast(pl.Float64).round(2).apply(lambda x: f"{x:.2f}" if x is not None else "").alias('_length_str'),
-                    pl.col('width').cast(pl.Float64).round(2).apply(lambda x: f"{x:.2f}" if x is not None else "").alias('_width_str'),
-                    pl.col('height').cast(pl.Float64).round(2).apply(lambda x: f"{x:.2f}" if x is not None else "").alias('_height_str'),
-                ]
-            )
+            parts_df = parts_df.with_columns([
+                pl.col('length').cast(pl.Utf8).fill_null(
+                    '').alias('_length_str'),
+                pl.col('width').cast(pl.Utf8).fill_null(
+                    '').alias('_width_str'),
+                pl.col('height').cast(pl.Utf8).fill_null(
+                    '').alias('_height_str'),
+            ])
 
             parts_df = parts_df.with_columns(
-                dimension_str_expr=pl.when(
+                pl.when(
                     (pl.col('dimensions_str').is_not_null()) &
                     (pl.col('dimensions_str').cast(pl.Utf8) != '')
                 ).then(
@@ -535,7 +534,8 @@ class HighVolumeAutoPartsCatalog:
                 )
             )
 
-            parts_df = parts_df.drop(['_length_str', '_width_str', '_height_str'])
+            parts_df = parts_df.drop(
+                ['_length_str', '_width_str', '_height_str'])
 
             if 'artikul' not in parts_df.columns:
                 parts_df = parts_df.with_columns(artikul=pl.lit(''))
@@ -543,26 +543,32 @@ class HighVolumeAutoPartsCatalog:
                 parts_df = parts_df.with_columns(brand=pl.lit(''))
 
             parts_df = parts_df.with_columns([
-                pl.col('artikul').cast(pl.Utf8).fill_null('').alias('_artikul_str'),
-                pl.col('brand').cast(pl.Utf8).fill_null('').alias('_brand_str'),
-                pl.col('multiplicity').cast(pl.Utf8).alias('_multiplicity_str'),
+                pl.col('artikul').cast(pl.Utf8).fill_null(
+                    '').alias('_artikul_str'),
+                pl.col('brand').cast(pl.Utf8).fill_null(
+                    '').alias('_brand_str'),
+                pl.col('multiplicity').cast(
+                    pl.Utf8).alias('_multiplicity_str'),
             ])
 
             parts_df = parts_df.with_columns(
                 description=pl.concat_str([
                     pl.lit('Артикул: '), pl.col('_artikul_str'),
                     pl.lit(', Бренд: '), pl.col('_brand_str'),
-                    pl.lit(', Кратность: '), pl.col('_multiplicity_str'), pl.lit(' шт.')
+                    pl.lit(', Кратность: '), pl.col(
+                        '_multiplicity_str'), pl.lit(' шт.')
                 ], separator='')
             )
 
-            parts_df = parts_df.drop(['_artikul_str', '_brand_str', '_multiplicity_str'])
+            parts_df = parts_df.drop(
+                ['_artikul_str', '_brand_str', '_multiplicity_str'])
 
             final_columns = [
                 'artikul_norm', 'brand_norm', 'artikul', 'brand', 'multiplicity', 'barcode',
                 'length', 'width', 'height', 'weight', 'image_url', 'dimensions_str', 'description'
             ]
-            select_exprs = [pl.col(c) if c in parts_df.columns else pl.lit(None).alias(c) for c in final_columns]
+            select_exprs = [pl.col(c) if c in parts_df.columns else pl.lit(
+                None).alias(c) for c in final_columns]
             parts_df = parts_df.select(select_exprs)
 
             self.upsert_data('parts', parts_df, ['artikul_norm', 'brand_norm'])
@@ -598,7 +604,7 @@ class HighVolumeAutoPartsCatalog:
         # Подготовка SQL для наценок по брендам
         brand_markups_sql = self._get_brand_markups_sql()
 
-        # Собираем список выражений для SELECT без лишних запятых
+        # Составляем список выражений для SELECT последовательно, чтобы избежать лишней запятой
         select_parts = []
 
         # Колонки с ценой (включаем только если include_prices и если пользователь не ограничил selected_columns
@@ -858,18 +864,13 @@ class HighVolumeAutoPartsCatalog:
             import pandas as pd
             pdf = df.to_pandas()
 
-            # Обработка колонок размеров: форматирование до 2 знаков
-            dimension_cols = ["Длинна", "Ширина", "Высота", "Вес", "Длинна/Ширина/Высота"]
+            # Обработка колонок размеров
+            dimension_cols = ["Длинна", "Ширина",
+                              "Высота", "Вес", "Длинна/Ширина/Высота"]
             for col in dimension_cols:
                 if col in pdf.columns:
-                    pdf[col] = pdf[col].astype(str).replace({'nan': ''})
-                    # Форматируем числа с 2 знаками
-                    def format_dim(x):
-                        try:
-                            return f"{float(x):.2f}"
-                        except:
-                            return ''
-                    pdf[col] = pdf[col].apply(lambda x: format_dim(x) if x != '' else '')
+                    pdf[col] = pd.to_numeric(pdf[col], errors='coerce')
+                    pdf[col] = pdf[col].apply(lambda x: f"{x:.2f}" if pd.notnull(x) else '')
 
             # Убедитесь, что директория для экспорта существует
             output_dir = Path("auto_parts_data")
@@ -899,17 +900,10 @@ class HighVolumeAutoPartsCatalog:
         query = self.build_export_query(
             selected_columns, include_prices, apply_markup)
         df = pd.read_sql(query, self.conn)
-        # Обработка размеров
         for col in ["Длинна", "Ширина", "Высота", "Вес", "Длинна/Ширина/Высота"]:
             if col in df.columns:
-                df[col] = df[col].astype(str).replace({r'^nan$': ''})
-                # Форматируем числа с 2 знаками
-                def format_dim(x):
-                    try:
-                        return f"{float(x):.2f}"
-                    except:
-                        return ''
-                df[col] = df[col].apply(lambda x: format_dim(x) if x != '' else '')
+                df[col] = df[col].astype(str).replace(
+                    {r'^nan$': ''}, regex=True)
         if len(df) <= EXCEL_ROW_LIMIT:
             with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False)
@@ -982,7 +976,7 @@ class HighVolumeAutoPartsCatalog:
         selected_columns = st.multiselect("Колонки", [
             "Артикул бренда", "Бренд", "Наименование", "Применимость", "Описание",
             "Категория товара", "Кратность", "Длинна", "Ширина", "Высота", "Вес",
-            "Длинна/Ширина/Высота", "OE номер", "аналоги", "Ссылка на изображение", "Цена", "Валюта"
+            "Длинна/Ширина/Высота", "ОЕ номер", "аналоги", "Ссылка на изображение", "Цена", "Валюта"
         ])
 
         include_prices = st.checkbox("Включить цены", value=True)
@@ -1210,7 +1204,7 @@ class HighVolumeAutoPartsCatalog:
         col1, col2, col3 = st.columns(3)
         col1.metric("Уникальных товаров", f"{stats['unique_parts']:,}")
         col2.metric("Брендов", f"{stats['brands']:,}")
-        col3.metric("Средняя цена", f"{stats['avg_price']:.2f} ₽")
+        col3.metric("Средняя цена", f"{stats['avg_price']} ₽")
 
         try:
             top_brands = self.conn.execute(
