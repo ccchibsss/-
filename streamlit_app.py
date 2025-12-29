@@ -16,12 +16,6 @@ import json
 
 warnings.filterwarnings('ignore')
 
-# Optional pandas for reading extra sheets and Excel export helpers
-try:
-    import pandas as pd
-except Exception:
-    pd = None
-
 # Настройка логирования
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
@@ -45,14 +39,11 @@ class HighVolumeAutoPartsCatalog:
         self.conn = duckdb.connect(database=str(self.db_path))
         self.setup_database()
 
-        try:
-            st.set_page_config(
-                page_title="AutoParts Catalog 10M+",
-                layout="wide",
-                page_icon="🚗"
-            )
-        except Exception:
-            pass
+        st.set_page_config(
+            page_title="AutoParts Catalog 10M+",
+            layout="wide",
+            page_icon="🚗"
+        )
 
     # --- Конфигурации ---
     def load_cloud_config(self) -> Dict[str, Any]:
@@ -210,10 +201,7 @@ class HighVolumeAutoPartsCatalog:
         self.create_indexes()
 
     def create_indexes(self):
-        try:
-            st.info("🛠️ Создание индексов для ускорения поиска...")
-        except Exception:
-            pass
+        st.info("🛠️ Создание индексов для ускорения поиска...")
         indexes = [
             "CREATE INDEX IF NOT EXISTS idx_oe_number_norm ON oe(oe_number_norm)",
             "CREATE INDEX IF NOT EXISTS idx_parts_keys ON parts(artikul_norm, brand_norm)",
@@ -226,10 +214,7 @@ class HighVolumeAutoPartsCatalog:
                 self.conn.execute(index_sql)
             except Exception as e:
                 logger.warning(f"Не удалось создать индекс: {e}")
-        try:
-            st.success("🛠️ Индексы созданы.")
-        except Exception:
-            pass
+        st.success("🛠️ Индексы созданы.")
 
     # --- Нормализация и очистка ---
     @staticmethod
@@ -280,112 +265,44 @@ class HighVolumeAutoPartsCatalog:
             ).then(pl.lit(category))
         return categorization_expr.otherwise(pl.lit('Разное')).alias('category')
 
-    # --- Обработка правил из xlsx ---
-    def import_rules_from_excel(self, file_path: str):
-        """
-        Попытка извлечь правила исключений и соответствия категорий из дополнительных листов xlsx-файла.
-        Поддерживаются листы:
-          - 'exclusions' / 'exclusion' / 'exclude'       -> колонка с терминами (первый столбец)
-          - 'categories' / 'category_mapping' / 'category' -> два столбца: ключ | категория
-        Если найдено — обновляет self.exclusion_rules и/или self.category_mapping и сохраняет файлы.
-        Требует pandas; если pandas отсутствует — пропускает.
-        """
-        if pd is None:
-            logger.debug("pandas not available; skipping import_rules_from_excel")
-            return
+    # --- Обработка файлов ---
+    def detect_columns(self, actual_columns: List[str], expected_columns: List[str]) -> Dict[str, str]:
+        column_variants = {
+            'oe_number': ['oe номер', 'oe', 'оe', 'номер', 'code', 'OE'],
+            'artikul': ['артикул', 'article', 'sku'],
+            'brand': ['бренд', 'brand', 'производитель', 'manufacturer'],
+            'name': ['наименование', 'название', 'name', 'описание', 'description'],
+            'applicability': ['применимость', 'автомобиль', 'vehicle', 'applicability'],
+            'barcode': ['штрих-код', 'barcode', 'штрихкод', 'ean', 'eac13'],
+            'multiplicity': ['кратность шт', 'кратность', 'multiplicity'],
+            'length': ['длина (см)', 'длина', 'length', 'длинна'],
+            'width': ['ширина (см)', 'ширина', 'width'],
+            'height': ['высота (см)', 'высота', 'height'],
+            'weight': ['вес (кг)', 'вес, кг', 'вес', 'weight'],
+            'image_url': ['ссылка', 'url', 'изображение', 'image', 'картинка'],
+            'dimensions_str': ['весогабариты', 'размеры', 'dimensions', 'size'],
+            'price': ['цена', 'price', 'рекомендованная цена', 'retail price'],
+            'currency': ['валюта', 'currency']
+        }
+        actual_lower = {col.lower(): col for col in actual_columns}
+        mapping = {}
+        for expected in expected_columns:
+            variants = column_variants.get(expected, [expected])
+            for variant in variants:
+                variant_lower = variant.lower()
+                for actual_l, actual_orig in actual_lower.items():
+                    if variant_lower in actual_l and actual_orig not in mapping:
+                        mapping[actual_orig] = expected
+                        break
+        return mapping
 
-        try:
-            xls = pd.ExcelFile(file_path)
-        except Exception as e:
-            logger.debug(f"No extra sheets to read from {file_path}: {e}")
-            return
-
-        sheet_names = [s.lower() for s in xls.sheet_names]
-
-        # Обработка exclusions
-        for candidate in ("exclusions", "exclusion", "exclude"):
-            if candidate in sheet_names:
-                try:
-                    df_ex = pd.read_excel(xls, sheet_name=candidate, header=0)
-                    if df_ex.shape[1] >= 1:
-                        col = df_ex.columns[0]
-                        terms = [str(x).strip() for x in df_ex[col].astype(str).tolist()
-                                 if str(x).strip() and str(x).strip().lower() not in ("nan", "none")]
-                        if terms:
-                            existing = list(self.exclusion_rules or [])
-                            added = 0
-                            for t in terms:
-                                if t not in existing:
-                                    existing.append(t)
-                                    added += 1
-                            if added:
-                                self.exclusion_rules = existing
-                                try:
-                                    self.save_exclusion_rules()
-                                except Exception:
-                                    pass
-                                logger.info(f"Imported {added} exclusion terms from sheet '{candidate}'")
-                                try:
-                                    st.success(f"Импортировано исключений: {added}")
-                                except Exception:
-                                    pass
-                except Exception as e:
-                    logger.warning(f"Не удалось прочитать лист {candidate}: {e}")
-                break
-
-        # Обработка categories
-        for candidate in ("categories", "category_mapping", "category", "categories_mapping"):
-            if candidate in sheet_names:
-                try:
-                    df_cat = pd.read_excel(xls, sheet_name=candidate, header=0)
-                    if df_cat.shape[1] >= 2:
-                        cols_lower = [c.lower() for c in df_cat.columns]
-                        key_idx = None
-                        val_idx = None
-                        for i, c in enumerate(cols_lower):
-                            if any(k in c for k in ("key", "name", "pattern", "название", "ключ")) and key_idx is None:
-                                key_idx = i
-                            if any(k in c for k in ("category", "категория", "value", "значение")) and val_idx is None:
-                                val_idx = i
-                        if key_idx is None or val_idx is None:
-                            key_idx, val_idx = 0, 1
-                        mapping_added = 0
-                        for _, row in df_cat.iterrows():
-                            k = str(row.iloc[key_idx]).strip() if not pd.isna(row.iloc[key_idx]) else ""
-                            v = str(row.iloc[val_idx]).strip() if not pd.isna(row.iloc[val_idx]) else ""
-                            if k and v:
-                                if k not in self.category_mapping or self.category_mapping.get(k) != v:
-                                    self.category_mapping[k] = v
-                                    mapping_added += 1
-                        if mapping_added:
-                            try:
-                                self.save_category_mapping()
-                                logger.info(f"Imported {mapping_added} category mappings from sheet '{candidate}'")
-                                try:
-                                    st.success(f"Импортировано правил категорий: {mapping_added}")
-                                except Exception:
-                                    pass
-                            except Exception as e:
-                                logger.error(f"Ошибка сохранения category_mapping: {e}")
-                except Exception as e:
-                    logger.warning(f"Не удалось прочитать лист {candidate}: {e}")
-                break
-
-    # --- Обработка файлов (обновлённый с импортом правил) ---
     def read_and_prepare_file(self, file_path: str, file_type: str) -> pl.DataFrame:
         logger.info(f"Обработка файла: {file_type} ({file_path})")
-        # Попробуем импортировать правила из дополнительных листов xlsx
-        try:
-            self.import_rules_from_excel(file_path)
-        except Exception as e:
-            logger.debug(f"import_rules_from_excel failed: {e}")
-
         try:
             if not os.path.exists(file_path):
                 logger.error(f"Файл не найден: {file_path}")
                 return pl.DataFrame()
 
-            # polars.read_excel по умолчанию читает первый лист
             df = pl.read_excel(file_path, engine='calamine')
             if df.is_empty():
                 logger.warning(f"Пустой файл: {file_path}")
@@ -394,54 +311,6 @@ class HighVolumeAutoPartsCatalog:
         except Exception as e:
             logger.exception(f"Ошибка чтения файла {file_path}: {e}")
             return pl.DataFrame()
-
-        # если в основном листе есть колонки с правилами — также обработаем их (через pandas)
-        try:
-            if pd is not None:
-                pdf = df.to_pandas()
-                # колонка с исключениями
-                for colname in pdf.columns:
-                    if colname.lower() in ("exclude", "exclusion", "exclude_term", "исключение", "исключения"):
-                        terms = [str(x).strip() for x in pdf[colname].dropna().astype(str).tolist() if str(x).strip()]
-                        if terms:
-                            existing = list(self.exclusion_rules or [])
-                            added = 0
-                            for t in terms:
-                                if t not in existing:
-                                    existing.append(t)
-                                    added += 1
-                            if added:
-                                self.exclusion_rules = existing
-                                try:
-                                    self.save_exclusion_rules()
-                                except Exception:
-                                    pass
-                                logger.info(f"Imported {added} exclusion terms from main sheet column '{colname}'")
-                        break
-                # колонки для категорий (например 'category_key' + 'category_value' или 'key' + 'category')
-                lc = [c.lower() for c in pdf.columns]
-                if ("category_key" in lc and "category_value" in lc) or ("key" in lc and "category" in lc):
-                    if "category_key" in lc and "category_value" in lc:
-                        kcol = pdf.columns[lc.index("category_key")]
-                        vcol = pdf.columns[lc.index("category_value")]
-                    else:
-                        kcol = pdf.columns[lc.index("key")]
-                        vcol = pdf.columns[lc.index("category")]
-                    mapping_added = 0
-                    for _, row in pdf[[kcol, vcol]].dropna(how="all").iterrows():
-                        k = str(row[kcol]).strip()
-                        v = str(row[vcol]).strip()
-                        if k and v:
-                            if k not in self.category_mapping or self.category_mapping.get(k) != v:
-                                self.category_mapping[k] = v
-                                mapping_added += 1
-                    if mapping_added:
-                        try:
-                            self.save_category_mapping()
-                        except Exception:
-                            pass
-        except Exception:
-            pass
 
         schemas = {
             'oe': ['oe_number', 'artikul', 'brand', 'name', 'applicability'],
@@ -481,6 +350,7 @@ class HighVolumeAutoPartsCatalog:
         if df.is_empty():
             return
         df = df.unique(keep='first')
+        cols = df.columns
         temp_view_name = f"temp_{table_name}_{int(time.time())}"
 
         # Регистрация временной таблицы в DuckDB
@@ -490,14 +360,17 @@ class HighVolumeAutoPartsCatalog:
             logger.error(f"Ошибка регистрации временной таблицы: {e}")
             return
 
+        # DuckDB не гарантирует синтаксис ON CONFLICT как в Postgres -> используем delete+insert
         try:
             pk_list = pk
             pk_cols_csv = ", ".join(f'"{c}"' for c in pk_list)
+            # удалить существующие записи, которые совпадают по PK
             delete_sql = f"""
                 DELETE FROM {table_name}
                 WHERE ({pk_cols_csv}) IN (SELECT {pk_cols_csv} FROM {temp_view_name});
             """
             self.conn.execute(delete_sql)
+            # вставить новые записи
             insert_sql = f"""
                 INSERT INTO {table_name}
                 SELECT * FROM {temp_view_name};
@@ -507,11 +380,8 @@ class HighVolumeAutoPartsCatalog:
                 f"Успешно upsert {len(df)} записей в таблицу {table_name}.")
         except Exception as e:
             logger.error(f"Ошибка при UPSERT в {table_name}: {e}")
-            try:
-                st.error(
-                    f"Ошибка при записи в таблицу {table_name}. Детали в логе.")
-            except Exception:
-                pass
+            st.error(
+                f"Ошибка при записи в таблицу {table_name}. Детали в логе.")
         finally:
             try:
                 self.conn.unregister(temp_view_name)
@@ -539,21 +409,17 @@ class HighVolumeAutoPartsCatalog:
         self.upsert_data('prices', price_df, ['artikul_norm', 'brand_norm'])
 
     def process_and_load_data(self, dataframes: Dict[str, pl.DataFrame]):
-        try:
-            st.info("🔄 Начало загрузки и обновления данных в базе...")
-        except Exception:
-            pass
+        st.info("🔄 Начало загрузки и обновления данных в базе...")
         steps = [s for s in ['oe', 'cross', 'parts'] if s in dataframes]
         num_steps = len(steps)
         progress_bar = st.progress(
-            0, text="Подготовка к обновлению базы данных...") if hasattr(st, "progress") else None
+            0, text="Подготовка к обновлению базы данных...")
         step_counter = 0
 
         if 'oe' in dataframes:
             step_counter += 1
-            if progress_bar:
-                progress_bar.progress(step_counter / (num_steps + 1),
-                                      text=f"({step_counter}/{num_steps}) Обработка OE данных...")
+            progress_bar.progress(step_counter / (num_steps + 1),
+                                  text=f"({step_counter}/{num_steps}) Обработка OE данных...")
             df = dataframes['oe'].filter(pl.col('oe_number_norm') != "")
             oe_df = df.select(['oe_number_norm', 'oe_number', 'name', 'applicability']).unique(
                 subset=['oe_number_norm'], keep='first')
@@ -573,9 +439,8 @@ class HighVolumeAutoPartsCatalog:
 
         if 'cross' in dataframes:
             step_counter += 1
-            if progress_bar:
-                progress_bar.progress(step_counter / (num_steps + 1),
-                                      text=f"({step_counter}/{num_steps}) Обработка кроссов...")
+            progress_bar.progress(step_counter / (num_steps + 1),
+                                  text=f"({step_counter}/{num_steps}) Обработка кроссов...")
             df = dataframes['cross'].filter(
                 (pl.col('oe_number_norm') != "") & (pl.col('artikul_norm') != ""))
             cross_df_from_cross = df.select(
@@ -586,21 +451,14 @@ class HighVolumeAutoPartsCatalog:
         if 'prices' in dataframes:
             price_df = dataframes['prices']
             if not price_df.is_empty():
-                try:
-                    st.info("💰 Обработка цен...")
-                except Exception:
-                    pass
+                st.info("💰 Обработка цен...")
                 self.upsert_prices(price_df)
-                try:
-                    st.success(
-                        f"✅ Успешно обновлено {len(price_df)} ценовых записей")
-                except Exception:
-                    pass
+                st.success(
+                    f"✅ Успешно обновлено {len(price_df)} ценовых записей")
 
         step_counter += 1
-        if progress_bar:
-            progress_bar.progress(step_counter / (num_steps + 1),
-                                  text=f"({step_counter}/{num_steps}) Сборка и обновление данных по артикулам...")
+        progress_bar.progress(step_counter / (num_steps + 1),
+                              text=f"({step_counter}/{num_steps}) Сборка и обновление данных по артикулам...")
 
         # Собираем parts из разных файлов
         parts_df = None
@@ -643,26 +501,27 @@ class HighVolumeAutoPartsCatalog:
                 parts_df = parts_df.with_columns(
                     pl.col('multiplicity').fill_null(1).cast(pl.Int32))
 
+            # Обработка размеров с форматированием до 2 знаков
             for col in ['length', 'width', 'height']:
-                if col not in parts_df.columns:
+                if col in parts_df.columns:
                     parts_df = parts_df.with_columns(
-                        pl.lit(None).cast(pl.Float64).alias(col))
+                        pl.col(col).cast(pl.Float64).round(2).apply(lambda x: f"{x:.2f}" if x is not None else "").alias(col)
+                    )
 
             if 'dimensions_str' not in parts_df.columns:
                 parts_df = parts_df.with_columns(
                     dimensions_str=pl.lit(None).cast(pl.Utf8))
 
-            parts_df = parts_df.with_columns([
-                pl.col('length').cast(pl.Utf8).fill_null(
-                    '').alias('_length_str'),
-                pl.col('width').cast(pl.Utf8).fill_null(
-                    '').alias('_width_str'),
-                pl.col('height').cast(pl.Utf8).fill_null(
-                    '').alias('_height_str'),
-            ])
+            parts_df = parts_df.with_columns(
+                [
+                    pl.col('length').cast(pl.Float64).round(2).apply(lambda x: f"{x:.2f}" if x is not None else "").alias('_length_str'),
+                    pl.col('width').cast(pl.Float64).round(2).apply(lambda x: f"{x:.2f}" if x is not None else "").alias('_width_str'),
+                    pl.col('height').cast(pl.Float64).round(2).apply(lambda x: f"{x:.2f}" if x is not None else "").alias('_height_str'),
+                ]
+            )
 
             parts_df = parts_df.with_columns(
-                dimensions_str=pl.when(
+                dimension_str_expr=pl.when(
                     (pl.col('dimensions_str').is_not_null()) &
                     (pl.col('dimensions_str').cast(pl.Utf8) != '')
                 ).then(
@@ -676,8 +535,7 @@ class HighVolumeAutoPartsCatalog:
                 )
             )
 
-            parts_df = parts_df.drop(
-                ['_length_str', '_width_str', '_height_str'])
+            parts_df = parts_df.drop(['_length_str', '_width_str', '_height_str'])
 
             if 'artikul' not in parts_df.columns:
                 parts_df = parts_df.with_columns(artikul=pl.lit(''))
@@ -685,50 +543,49 @@ class HighVolumeAutoPartsCatalog:
                 parts_df = parts_df.with_columns(brand=pl.lit(''))
 
             parts_df = parts_df.with_columns([
-                pl.col('artikul').cast(pl.Utf8).fill_null(
-                    '').alias('_artikul_str'),
-                pl.col('brand').cast(pl.Utf8).fill_null(
-                    '').alias('_brand_str'),
-                pl.col('multiplicity').cast(
-                    pl.Utf8).alias('_multiplicity_str'),
+                pl.col('artikul').cast(pl.Utf8).fill_null('').alias('_artikul_str'),
+                pl.col('brand').cast(pl.Utf8).fill_null('').alias('_brand_str'),
+                pl.col('multiplicity').cast(pl.Utf8).alias('_multiplicity_str'),
             ])
 
             parts_df = parts_df.with_columns(
                 description=pl.concat_str([
                     pl.lit('Артикул: '), pl.col('_artikul_str'),
                     pl.lit(', Бренд: '), pl.col('_brand_str'),
-                    pl.lit(', Кратность: '), pl.col(
-                        '_multiplicity_str'), pl.lit(' шт.')
+                    pl.lit(', Кратность: '), pl.col('_multiplicity_str'), pl.lit(' шт.')
                 ], separator='')
             )
 
-            parts_df = parts_df.drop(
-                ['_artikul_str', '_brand_str', '_multiplicity_str'])
+            parts_df = parts_df.drop(['_artikul_str', '_brand_str', '_multiplicity_str'])
 
             final_columns = [
                 'artikul_norm', 'brand_norm', 'artikul', 'brand', 'multiplicity', 'barcode',
                 'length', 'width', 'height', 'weight', 'image_url', 'dimensions_str', 'description'
             ]
-            select_exprs = [pl.col(c) if c in parts_df.columns else pl.lit(
-                None).alias(c) for c in final_columns]
+            select_exprs = [pl.col(c) if c in parts_df.columns else pl.lit(None).alias(c) for c in final_columns]
             parts_df = parts_df.select(select_exprs)
 
             self.upsert_data('parts', parts_df, ['artikul_norm', 'brand_norm'])
 
-        if progress_bar:
-            progress_bar.progress(1.0, text="Обновление базы данных завершено!")
-            time.sleep(0.2)
-            progress_bar.empty()
+        progress_bar.progress(1.0, text="Обновление базы данных завершено!")
+        time.sleep(1)
+        progress_bar.empty()
 
     # --- Экспорт ---
     def _get_brand_markups_sql(self) -> str:
         rows = []
         for brand, markup in self.price_rules['brand_markups'].items():
+            # экранируем одинарные кавычки в brand
             safe_brand = brand.replace("'", "''")
             rows.append(f"SELECT '{safe_brand}' AS brand, {markup} AS markup")
         return " UNION ALL ".join(rows) if rows else "SELECT NULL AS brand, NULL AS markup LIMIT 0"
 
     def build_export_query(self, selected_columns=None, include_prices=True, apply_markup=True):
+        """
+        Исправленная версия build_export_query: собирает список колонок по-частям,
+        избегая лишних запятых (zero-length delimited identifier) и корректно
+        включает колонки цены при запросе selected_columns.
+        """
         description_text = (
             "Состояние товара: новый (в упаковке). Высококачественные автозапчасти и автотовары — надежное решение для вашего автомобиля. "
             "Обеспечьте безопасность, долговечность и высокую производительность вашего авто с помощью нашего широкого ассортимента оригинальных и совместимых автозапчастей. "
@@ -738,9 +595,14 @@ class HighVolumeAutoPartsCatalog:
             "Выбирайте только лучшее — надежность и качество от ведущих производителей."
         )
 
+        # Подготовка SQL для наценок по брендам
         brand_markups_sql = self._get_brand_markups_sql()
+
+        # Собираем список выражений для SELECT без лишних запятых
         select_parts = []
 
+        # Колонки с ценой (включаем только если include_prices и если пользователь не ограничил selected_columns
+        # или если explicit-но запросил "Цена" / "Валюта")
         price_requested = include_prices and (not selected_columns or "Цена" in selected_columns or "Валюта" in selected_columns)
         if price_requested:
             if apply_markup:
@@ -752,6 +614,7 @@ class HighVolumeAutoPartsCatalog:
                 select_parts.append('pr.price AS "Цена"')
             select_parts.append("COALESCE(pr.currency, 'RUB') AS \"Валюта\"")
 
+        # Остальные колонки (название -> выражение)
         columns_map = [
             ("Артикул бренда", 'r.artikul AS "Артикул бренда"'),
             ("Бренд", 'r.brand AS "Бренд"'),
@@ -779,13 +642,16 @@ class HighVolumeAutoPartsCatalog:
             ("Ссылка на изображение", 'r.image_url AS "Ссылка на изображение"')
         ]
 
+        # Добавляем остальные выражения в порядке columns_map, с учётом selected_columns фильтра
         for name, expr in columns_map:
             if not selected_columns or name in selected_columns:
                 select_parts.append(expr.strip())
 
+        # Если вдруг пользователь полностью снял все колонки и нет price_requested — включаем минимум r.artikul/r.brand
         if not select_parts:
             select_parts = ['r.artikul AS "Артикул бренда"', 'r.brand AS "Бренд"']
 
+        # Собираем тело SELECT, безопасно объединяя без завершающих запятых
         select_clause = ",\n        ".join(select_parts)
 
         ctes = f"""
@@ -972,6 +838,7 @@ class HighVolumeAutoPartsCatalog:
         ORDER BY r.brand, r.artikul
         """
 
+        # Небольшая пост-обработка: удалить пустые строки и лишевые пробелы
         return "\n".join([line.rstrip() for line in query.strip().splitlines()])
 
     def export_to_csv_optimized(self, output_path: str, selected_columns: Optional[List[str]] = None, include_prices: bool = True, apply_markup: bool = True) -> bool:
@@ -984,24 +851,34 @@ class HighVolumeAutoPartsCatalog:
         try:
             query = self.build_export_query(
                 selected_columns, include_prices, apply_markup)
+            # Логирование запроса
             logger.info(f"Executing export query: {query}")
+            # Получаем результат как polars, затем в pandas для корректной записи CSV
             df = self.conn.execute(query).pl()
-            import pandas as _pd
+            import pandas as pd
             pdf = df.to_pandas()
 
-            dimension_cols = ["Длинна", "Ширина",
-                              "Высота", "Вес", "Длинна/Ширина/Высота"]
+            # Обработка колонок размеров: форматирование до 2 знаков
+            dimension_cols = ["Длинна", "Ширина", "Высота", "Вес", "Длинна/Ширина/Высота"]
             for col in dimension_cols:
                 if col in pdf.columns:
                     pdf[col] = pdf[col].astype(str).replace({'nan': ''})
+                    # Форматируем числа с 2 знаками
+                    def format_dim(x):
+                        try:
+                            return f"{float(x):.2f}"
+                        except:
+                            return ''
+                    pdf[col] = pdf[col].apply(lambda x: format_dim(x) if x != '' else '')
 
+            # Убедитесь, что директория для экспорта существует
             output_dir = Path("auto_parts_data")
             output_dir.mkdir(parents=True, exist_ok=True)
 
             buf = io.StringIO()
             pdf.to_csv(buf, sep=';', index=False)
             with open(output_path, "wb") as f:
-                f.write(b'\xef\xbb\xbf')
+                f.write(b'\xef\xbb\xbf')  # Добавление BOM для поддержки UTF-8
                 f.write(buf.getvalue().encode('utf-8'))
             size_mb = os.path.getsize(output_path) / (1024 * 1024)
             st.success(
@@ -1009,10 +886,7 @@ class HighVolumeAutoPartsCatalog:
             return True
         except Exception as e:
             logger.exception("Ошибка экспорта CSV")
-            try:
-                st.error(f"Ошибка при экспорте в CSV: {str(e)}")
-            except Exception:
-                pass
+            st.error(f"Ошибка при экспорте в CSV: {str(e)}")
             return False
 
     def export_to_excel_optimized(self, output_path: str, selected_columns: Optional[List[str]] = None, include_prices: bool = True, apply_markup: bool = True) -> bool:
@@ -1021,20 +895,27 @@ class HighVolumeAutoPartsCatalog:
         if total == 0:
             st.warning("Нет данных для экспорта")
             return False
-        import pandas as _pd
+        import pandas as pd
         query = self.build_export_query(
             selected_columns, include_prices, apply_markup)
-        df = _pd.read_sql(query, self.conn)
+        df = pd.read_sql(query, self.conn)
+        # Обработка размеров
         for col in ["Длинна", "Ширина", "Высота", "Вес", "Длинна/Ширина/Высота"]:
             if col in df.columns:
-                df[col] = df[col].astype(str).replace(
-                    {r'^nan$': ''}, regex=True)
+                df[col] = df[col].astype(str).replace({r'^nan$': ''})
+                # Форматируем числа с 2 знаками
+                def format_dim(x):
+                    try:
+                        return f"{float(x):.2f}"
+                    except:
+                        return ''
+                df[col] = df[col].apply(lambda x: format_dim(x) if x != '' else '')
         if len(df) <= EXCEL_ROW_LIMIT:
-            with _pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+            with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False)
         else:
             sheets = (len(df) // EXCEL_ROW_LIMIT) + 1
-            with _pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+            with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
                 for i in range(sheets):
                     df.iloc[i*EXCEL_ROW_LIMIT:(i+1)*EXCEL_ROW_LIMIT].to_excel(
                         writer, index=False, sheet_name=f"Данные_{i+1}")
@@ -1049,10 +930,7 @@ class HighVolumeAutoPartsCatalog:
             return True
         except Exception as e:
             logger.exception("Ошибка экспорта Parquet")
-            try:
-                st.error(f"Ошибка при экспорте в Parquet: {str(e)}")
-            except Exception:
-                pass
+            st.error(f"Ошибка при экспорте в Parquet: {str(e)}")
             return False
 
     # --- Управление данными ---
@@ -1332,7 +1210,7 @@ class HighVolumeAutoPartsCatalog:
         col1, col2, col3 = st.columns(3)
         col1.metric("Уникальных товаров", f"{stats['unique_parts']:,}")
         col2.metric("Брендов", f"{stats['brands']:,}")
-        col3.metric("Средняя цена", f"{stats['avg_price']} ₽")
+        col3.metric("Средняя цена", f"{stats['avg_price']:.2f} ₽")
 
         try:
             top_brands = self.conn.execute(
