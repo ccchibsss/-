@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from transliterate import translit
 import io
-import time
 
 def main():
     st.title("Расширенный инструмент транслитерации с обработкой больших файлов")
@@ -47,52 +46,41 @@ def main():
         st.dataframe(df)
 
         columns = df.columns.tolist()
-        selected_columns = st.multiselect("Выберите столбцы для транслитерации", columns)
+        selected_column_for_translit = st.selectbox("Выберите столбец для транслитерации", columns)
 
-        if selected_columns:
+        if selected_column_for_translit:
+            # Меню выбора формата для скачивания
+            download_format = st.radio("Выберите формат для скачивания", ["CSV", "Excel"])
+
             if st.button("Начать обработку и транслитерацию"):
-                df_result = pd.DataFrame()
-                total_rows = len(df)
-                progress_bar = st.progress(0)
-                status_text = st.empty()
+                df_result = df.copy()
 
-                # Обработка по частям для больших файлов
-                total_chunks = (total_rows // chunk_size) + 1
-                processed_rows = 0
-
-                # Обработка по частям
-                for chunk in (pd.read_excel(uploaded_file, chunksize=chunk_size) if file_type == 'excel' else pd.read_csv(uploaded_file, chunksize=chunk_size, encoding=encoding)):
-                    # Обработка выбранных столбцов
-                    for col in selected_columns:
-                        new_col = f"{col}_transliterated"
-                        chunk[new_col] = chunk[col].apply(transliterate_text)
-                    df_result = pd.concat([df_result, chunk], ignore_index=True)
-                    processed_rows += len(chunk)
-                    progress = processed_rows / total_rows
-                    progress_bar.progress(progress)
-                    status_text.text(f"Обработано строк: {processed_rows}/{total_rows}")
-                st.success("Обработка завершена!")
+                # Транслитерация выбранного столбца
+                df_result[f"{selected_column_for_translit}_transliterated"] = df_result[selected_column_for_translit].apply(transliterate_text)
 
                 st.subheader("Результат")
                 st.dataframe(df_result)
 
                 # Создание файла для скачивания
                 output = io.BytesIO()
-                if file_type == 'excel':
+                if download_format == "Excel":
                     df_result.to_excel(output, index=False)
+                    filename = "transliterated_result.xlsx"
+                    mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 else:
-                    df_result.to_csv(output, index=False, encoding=encoding)
+                    df_result.to_csv(output, index=False, encoding='utf-8')
+                    filename = "transliterated_result.csv"
+                    mime_type = "text/csv"
                 output.seek(0)
 
                 st.download_button(
                     label="Скачать файл",
                     data=output,
-                    file_name="transliterated_full.xlsx" if file_type == 'excel' else "transliterated_full.csv",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if file_type == 'excel' else "text/csv"
+                    file_name=filename,
+                    mime=mime_type
                 )
-
         else:
-            st.info("Пожалуйста, выберите хотя бы один столбец для транслитерации.")
+            st.info("Пожалуйста, выберите столбец для транслитерации.")
 
 def transliterate_text(text):
     if pd.isna(text):
