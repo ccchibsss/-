@@ -34,14 +34,18 @@ def main():
         st.write("Результат:")
         st.dataframe(df[[column_name, new_column_name]])
 
-        # Предлагаем скачать обработанный файл
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="Скачать обработанный файл",
-            data=csv,
-            file_name="transliterated.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        # Сохраняем в Excel файл и даем скачать
+        output_path = "transliterated.xlsx"
+        with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False)
+
+        with open(output_path, "rb") as file:
+            st.download_button(
+                label="Скачать обработанный файл",
+                data=file,
+                file_name="transliterated.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
 if __name__ == "__main__":
     main()
