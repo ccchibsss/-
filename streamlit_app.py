@@ -55,8 +55,32 @@ def main():
             if st.button("Начать обработку и транслитерацию"):
                 df_result = df.copy()
 
-                # Транслитерация выбранного столбца с обработкой кодировок
-                df_result[f"{selected_column_for_translit}_transliterated"] = df_result[selected_column_for_translit].apply(transliterate_text)
+                # Транслитерация выбранного столбца с расширенной диагностикой
+                def transliterate_with_diagnostics(value):
+                    # Выводим исходное значение
+                    st.write(f"Исходное значение: {repr(value)}")
+                    # Обработка байтовых строк
+                    if isinstance(value, bytes):
+                        try:
+                            value = value.decode('utf-8', errors='ignore')
+                            st.write(f"Декодированное байтовое значение: {repr(value)}")
+                        except Exception as e:
+                            st.write(f"Ошибка декодирования байтов: {e}")
+                            return value
+                    # Обработка NaN
+                    if pd.isna(value):
+                        return value
+                    try:
+                        # Транслитерация
+                        transliterated = translit(str(value), 'ru', reversed=True)
+                        st.write(f"Результат транслитерации: {repr(transliterated)}")
+                        return transliterated
+                    except Exception as e:
+                        st.write(f"Ошибка транслитерации: {e}")
+                        return value
+
+                # Применяем функцию с диагностикой
+                df_result[f"{selected_column_for_translit}_transliterated"] = df_result[selected_column_for_translit].apply(transliterate_with_diagnostics)
 
                 st.subheader("Результат")
                 st.dataframe(df_result)
@@ -68,7 +92,6 @@ def main():
                     filename = "transliterated_result.xlsx"
                     mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 else:
-                    # Перед сохранением убедимся, что строки в utf-8
                     df_result.to_csv(output, index=False, encoding='utf-8')
                     filename = "transliterated_result.csv"
                     mime_type = "text/csv"
@@ -82,21 +105,6 @@ def main():
                 )
         else:
             st.info("Пожалуйста, выберите столбец для транслитерации.")
-
-def transliterate_text(text):
-    if pd.isna(text):
-        return text
-    try:
-        # Производим транслитерацию
-        transliterated = translit(str(text), 'ru', reversed=True)
-        # Обеспечиваем правильную кодировку
-        if isinstance(transliterated, str):
-            return transliterated
-        else:
-            # В случае, если результат не строка, попробуем его декодировать
-            return transliterated.decode('utf-8')
-    except Exception:
-        return text
 
 if __name__ == "__main__":
     main()
