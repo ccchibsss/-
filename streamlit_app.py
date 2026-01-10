@@ -2,12 +2,14 @@ import streamlit as st
 import pandas as pd
 from transliterate import translit
 import io
+import re
 
 def main():
     st.title("Расширенный инструмент транслитерации с обработкой больших файлов")
     st.markdown("""
     Этот инструмент позволяет обрабатывать очень большие файлы Excel или CSV, транслитерировать выбранные столбцы,
-    логировать процесс и скачивать результаты.
+    логировать процесс и скачивать результаты. Также автоматически переводит кириллицу в русский перед транслитерацией
+    и добавляет перевод в скобках.
     """)
 
     # Логирование
@@ -52,35 +54,26 @@ def main():
             # Меню выбора формата для скачивания
             download_format = st.radio("Выберите формат для скачивания", ["CSV", "Excel"])
 
+            # Функции для автоматического перевода кириллицы в русский
+            def is_cyrillic(text):
+                return bool(re.search('[\u0400-\u04FF]', str(text)))
+
+            def process_value(value):
+                value_str = str(value)
+                if is_cyrillic(value_str):
+                    try:
+                        rus_text = translit(value_str, 'ru', reversed=True)
+                    except Exception:
+                        rus_text = value_str
+                    return f"{value_str} ({rus_text})"
+                else:
+                    return value_str
+
             if st.button("Начать обработку и транслитерацию"):
                 df_result = df.copy()
 
-                # Транслитерация выбранного столбца с расширенной диагностикой
-                def transliterate_with_diagnostics(value):
-                    # Выводим исходное значение
-                    st.write(f"Исходное значение: {repr(value)}")
-                    # Обработка байтовых строк
-                    if isinstance(value, bytes):
-                        try:
-                            value = value.decode('utf-8', errors='ignore')
-                            st.write(f"Декодированное байтовое значение: {repr(value)}")
-                        except Exception as e:
-                            st.write(f"Ошибка декодирования байтов: {e}")
-                            return value
-                    # Обработка NaN
-                    if pd.isna(value):
-                        return value
-                    try:
-                        # Транслитерация
-                        transliterated = translit(str(value), 'ru', reversed=True)
-                        st.write(f"Результат транслитерации: {repr(transliterated)}")
-                        return transliterated
-                    except Exception as e:
-                        st.write(f"Ошибка транслитерации: {e}")
-                        return value
-
-                # Применяем функцию с диагностикой
-                df_result[f"{selected_column_for_translit}_transliterated"] = df_result[selected_column_for_translit].apply(transliterate_with_diagnostics)
+                # Применяем функцию обработки
+                df_result[f"{selected_column_for_translit}_processed"] = df_result[selected_column_for_translit].apply(process_value)
 
                 st.subheader("Результат")
                 st.dataframe(df_result)
