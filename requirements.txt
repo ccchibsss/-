@@ -1,4 +1,15 @@
-pandas
-requests
-pymorphy2
-streamlit
+# Основные зависимости
+pandas>=1.5
+requests>=2.28
+openpyxl>=3.0
+xlrd>=2.0
+
+# Морфологический анализ (русский словарь отдельно)
+pymorphy2>=0.9.1
+pymorphy2-dicts-ru>=2.4
+
+# Опционально: веб-интерфейс Streamlit (если нужен GUI)
+streamlit>=1.20
+
+# Удобства (опционально)
+tqdm>=4.64  # прогресс-бар для CLI-процессинга
