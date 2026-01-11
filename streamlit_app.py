@@ -205,7 +205,11 @@ car_brands_models = {
 }
 
 # Инициализация морфологического анализатора
-morph = pymorphy2.MorphAnalyzer()
+try:
+    morph = pymorphy2.MorphAnalyzer()
+except Exception:
+    morph = None
+    st.error("Ошибка при загрузке pymorphy2. Проверьте установку.")
 
 def latin_to_cyrillic(text: str) -> str:
     if not isinstance(text, str) or text == "":
@@ -267,7 +271,7 @@ def contains_cyrillic(text):
     return bool(re.search(r'[\u0400-\u04FF]', str(text)))
 
 def decline_word(word):
-    if not word:
+    if not word or not morph:
         return word
     parse = morph.parse(word)
     if parse:
@@ -293,47 +297,62 @@ def load_external_data(url):
         st.error(f"Ошибка при загрузке внешних данных: {e}")
     return pd.DataFrame()
 
+def find_similar_word(word, dictionary_keys, threshold=0.8):
+    max_ratio = 0
+    most_similar = None
+    for key in dictionary_keys:
+        ratio = SequenceMatcher(None, word.lower(), key.lower()).ratio()
+        if ratio > max_ratio:
+            max_ratio = ratio
+            most_similar = key
+    if max_ratio >= threshold:
+        return most_similar
+    return None
+
 def process_text_with_all_sources(text, dictionary, dataset, external_df=None):
     if not isinstance(text, str):
         return text
+
     # Обработка латиницы
     if contains_latin(text) and not contains_cyrillic(text):
         cyr_text = latin_to_cyrillic(text)
         cyr_text = decline_word(cyr_text)
         return f"{text} ({cyr_text})"
-    # Обработка русских названий
+
+    # Обработка русских названий из словаря
     for eng_name, ru_name in dictionary.items():
         pattern = re.escape(eng_name)
         regex = re.compile(r'\b' + pattern + r'\b', re.IGNORECASE)
         text = regex.sub(lambda m: f"{m.group(0)} ({decline_word(ru_name)})", text)
+
     # Расширение из dataset
     if dataset is not None:
         all_texts = dataset.astype(str).str.cat(sep=' ')
         words_in_text = set(re.findall(r'\b\w+\b', all_texts))
         for word in words_in_text:
             if word not in dictionary:
-                for known_name in list(dictionary.keys()):
-                    ratio = SequenceMatcher(None, word.lower(), known_name.lower()).ratio()
-                    if ratio > 0.8:
-                        dictionary[word] = word
-                        st.write(f"Добавлено из данных: {word}")
-                        pattern_new = re.escape(word)
-                        regex_new = re.compile(r'\b' + pattern_new + r'\b', re.IGNORECASE)
-                        text = regex_new.sub(lambda m: f"{m.group(0)} ({decline_word(word)})", text)
+                similar = find_similar_word(word, list(dictionary.keys()), threshold=0.8)
+                if similar:
+                    dictionary[word] = word
+                    st.write(f"Добавлено из данных: {word}")
+                    pattern_new = re.escape(word)
+                    regex_new = re.compile(r'\b' + pattern_new + r'\b', re.IGNORECASE)
+                    text = regex_new.sub(lambda m: f"{m.group(0)} ({decline_word(word)})", text)
+
     # Обработка внешних данных
-    if external_df is not None:
+    if external_df is not None and not external_df.empty:
         all_ext_texts = external_df.astype(str).str.cat(sep=' ')
         ext_words = set(re.findall(r'\b\w+\b', all_ext_texts))
         for word in ext_words:
             if word not in dictionary:
-                for known_name in list(dictionary.keys()):
-                    ratio = SequenceMatcher(None, word.lower(), known_name.lower()).ratio()
-                    if ratio > 0.8:
-                        dictionary[word] = word
-                        st.write(f"Добавлено из внешних данных: {word}")
-                        pattern_new = re.escape(word)
-                        regex_new = re.compile(r'\b' + pattern_new + r'\b', re.IGNORECASE)
-                        text = regex_new.sub(lambda m: f"{m.group(0)} ({decline_word(word)})", text)
+                similar = find_similar_word(word, list(dictionary.keys()), threshold=0.8)
+                if similar:
+                    dictionary[word] = word
+                    st.write(f"Добавлено из внешних данных: {word}")
+                    pattern_new = re.escape(word)
+                    regex_new = re.compile(r'\b' + pattern_new + r'\b', re.IGNORECASE)
+                    text = regex_new.sub(lambda m: f"{m.group(0)} ({decline_word(word)})", text)
+
     return text
 
 def main():
