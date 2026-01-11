@@ -1,16 +1,3 @@
-"""
-Улучшенная и исправленная версия скрипта обработки названий автомобилей.
-
-Исправления/улучшения:
-- Добавлен импорт json и проверка при загрузке/сохранении дополнительных записей.
-- Загруженные дополнительные пары объединяются с основным словарём.
-- Исправлена опечатка "Fabiа" -> "Fabia".
-- При подготовке расширений (candidates) now additions map values -> русские имена (если найдены).
-- Более надёжное чтение внешних файлов/URL и сохранение добавлений.
-- Скрипт работает как с Streamlit (если установлен), так и в CLI режиме.
-- Небольшие проверки и обработка ошибок.
-"""
-
 from __future__ import annotations
 import io
 import re
@@ -37,12 +24,10 @@ try:
 except Exception:
     morph = None
 
-# Путь к файлу для хранения пользовательских добавлений
 ADDITIONS_FILE = "additional_brands.json"
 
-# Исходный словарь марок и моделей (исправлена опечатка "Fabia")
+# Базовый словарь брендов/моделей
 car_brands_models = {
-    # Немецкие
     "BMW": "БМВ", "1 Series": "1 Серия", "2 Series": "2 Серия", "3 Series": "3 Серия",
     "4 Series": "4 Серия", "5 Series": "5 Серия", "6 Series": "6 Серия", "7 Series": "7 Серия",
     "8 Series": "8 Серия", "X1": "Икс 1", "X2": "Икс 2", "X3": "Икс 3", "X4": "Икс 4",
@@ -51,19 +36,16 @@ car_brands_models = {
     "B-Class": "Б-Класс", "C-Class": "С-Класс", "E-Class": "Е-Класс", "S-Class": "Си-Класс",
     "GLC": "ГЛЦ", "GLE": "ГЛЕ", "GLS": "ГЛС", "G-Class": "Г-Класс", "CLS": "ЦЛС",
     "Vito": "Вито", "Sprinter": "Спритер",
-    # Япония
     "Toyota": "Тойота", "Corolla": "Королла", "Camry": "Камри", "RAV4": "Рав 4", "Prius": "Приус",
     "Land Cruiser": "Ленд Крузер", "Yaris": "Ярис", "Highlander": "Хайлендер", "Hilux": "Хайлюкс",
     "Sienta": "Сента", "Avensis": "Авенсис",
     "Mazda": "Мазда", "Mazda3": "Мазда 3", "Mazda6": "Мазда 6", "CX-3": "Кс 3", "CX-5": "Кс 5",
     "CX-9": "Кс 9", "MX-5": "МХ 5", "Subaru": "Субару", "Impreza": "Импреза", "Forester": "Форестер",
     "Outback": "Аутбек", "XV": "Икс ВИ",
-    # Корея
     "Kia": "Киа", "Rio": "Рио", "Ceed": "Сид", "Sportage": "Спортейдж", "Sorento": "Соренто",
     "Soul": "Соул", "Optima": "Оптима", "Carnival": "Карнавал", "Stinger": "Стингер",
     "Hyundai": "Хёндай", "Elantra": "Элантра", "Sonata": "Соната", "Tucson": "Тусон",
     "Santa Fe": "Санта Фе", "Kona": "Кона", "Veloster": "Велюстер",
-    # Китай
     "BYD": "БайДжи", "Han": "Хан", "Tang": "Танг", "Song": "Сонг", "Dolphin": "Дельфин",
     "F3": "Ф3", "F7": "Ф7", "Geely": "Джили", "Atlas": "Атлас", "Tiggo": "Тигго",
     "Coolray": "Кулрэй", "Emgrand": "Эмгранд", "Binrui": "Бинрай", "Chery": "Черри",
@@ -71,23 +53,19 @@ car_brands_models = {
     "S2": "Эс 2", "S3": "Эс 3", "Megan": "Меган", "Lifan": "Лифан", "Baojun": "Баоцзюнь",
     "Hongqi": "Хунци", "FAW": "Фав", "Bestune": "Бестюн", "Levdeo": "Левдео", "Wey": "Вей",
     "Yema": "Йема",
-    # Русские
     "Lada": "Лада", "Vesta": "Веста", "Granta": "Гранта", "Kalina": "Калина", "Niva": "Нива",
     "UAZ": "УАЗ", "Gaz": "Газ", "ZAZ": "Заз", "Vaz": "Ваз", "Lada Priora": "Лада Приора",
     "Lada 4x4": "Лада 4х4", "Lada XRay": "Лада Xray",
-    # Европа
     "Audi": "Ауди", "A1": "А1", "A3": "А3", "A4": "А4", "A6": "А6", "A8": "А8",
     "Q3": "Кью 3", "Q5": "Кью 5", "Q7": "Кью 7", "Q8": "Кью 8", "RS3": "Эр Эс 3",
     "RS5": "Эр Эс 5", "TT": "ТТ", "Volkswagen": "Фольксваген", "Golf": "Гольф",
     "Passat": "Пассат", "Tiguan": "Тигуан", "Touareg": "Туарег", "Jetta": "Джетта",
     "Arteon": "Артеон", "Skoda": "Шкода", "Octavia": "Октавия", "Superb": "Суперб",
     "Kodiaq": "Кодьяк", "Karoq": "Кароак", "Fabia": "Фабия", "Yeti": "Йети",
-    # Америка
     "Ford": "Форд", "Fiesta": "Фиеста", "Focus": "Фокус", "Mustang": "Мустанг",
     "Ranger": "Рейнджер", "Bronco": "Бронко", "Chevrolet": "Шевроле", "Aveo": "Авео",
     "Lacetti": "Лачетти", "Malibu": "Мальбу", "Trailblazer": "Трейлблейзер",
     "Tahoe": "Тахо", "Silverado": "Сильверадо",
-    # Франция/Италия/Другое
     "Peugeot": "Пежо", "208": "208", "308": "308", "508": "508", "3008": "3008",
     "5008": "5008", "Expert": "Эксперт", "Renault": "Рено", "Clio": "Клио", "Megane": "Меган",
     "Captur": "Каптюр", "Kangoo": "Кангру", "Koleos": "Колеос", "Duster": "Дастер",
@@ -97,21 +75,164 @@ car_brands_models = {
     "SsangYong": "СангЁнг",
 }
 
-# Загружаем пользовательские добавления (если файл есть), объединяем со словарём
+# Загрузка пользовательских добавлений (если есть)
 added_pairs: dict = {}
 if os.path.exists(ADDITIONS_FILE):
     try:
         with open(ADDITIONS_FILE, "r", encoding="utf-8") as f:
             loaded = json.load(f)
             if isinstance(loaded, dict):
-                added_pairs = loaded
-                # Приводим ключи/значения к str и обновляем основной словарь
-                cleaned = {str(k): str(v) for k, v in added_pairs.items()}
-                car_brands_models.update(cleaned)
+                added_pairs = {str(k): str(v) for k, v in loaded.items()}
+                car_brands_models.update(added_pairs)
             else:
                 print(f"Предупреждение: {ADDITIONS_FILE} не содержит словарь, пропускаю.")
     except Exception as e:
         print("Ошибка при загрузке дополнительных добавлений:", e)
+
+# Расширенный словарь — дополнительный набор брендов/моделей (объединяет
+# пожелания)
+EXTENDED_CAR_BRANDS = {
+    # Из запроса: расширенный общесловарный набор
+    # Немецкие
+    "Mercedes": "Мерседес",
+    "GLA": "ГЛА",
+    # Nissan / японские
+    "Nissan": "Ниссан",
+    "Altima": "Альтима",
+    "Rogue": "Роудж",
+    "Leaf": "Лиф",
+    "Mitsubishi": "Мицубиси",
+    "Outlander": "Аутлендер",
+    "Pajero": "Паджеро",
+    "Jimny": "Джимни",
+    "Acura": "Акура",
+    "Integra": "Интегра",
+    "Infiniti": "Инфинити",
+    "Q50": "Q50",
+    "QX60": "QX60",
+
+    # Электромобили / современные бренды
+    "Tesla": "Тесла",
+    "Model S": "Модель S",
+    "Model 3": "Модель 3",
+    "Model X": "Модель X",
+    "Model Y": "Модель Y",
+    "Lucid": "Лусид",
+    "Air": "Эйр",
+    "Rivian": "Ривиан",
+    "R1T": "R1T",
+    "NIO": "Нио",
+    "ES8": "ES8",
+    "XPeng": "ХПэнг",
+    "P7": "P7",
+
+    # Британские / люкс
+    "Rolls-Royce": "Роллс-Ройс",
+    "Phantom": "Фантом",
+    "Ghost": "Гост",
+    "Bentley": "Бентли",
+    "Continental": "Континенталь",
+    "Aston Martin": "Астон Мартин",
+    "DB11": "DB11",
+    "Lagonda": "Лагонда",
+    "Jaguar": "Ягуар",
+    "Land Rover": "Ленд Ровер",
+    "Range Rover": "Рендж Ровер",
+    "Discovery": "Дискавери",
+    "Mini": "Мини",
+    "Cooper": "Купер",
+
+    # Итальянские / спорт
+    "Ferrari": "Феррари",
+    "488": "488",
+    "Portofino": "Портофино",
+    "Lamborghini": "Ламборгини",
+    "Huracan": "Уракан",
+    "Aventador": "Авентадор",
+    "Maserati": "Мазерати",
+    "Quattroporte": "Кваттропорте",
+    "Pagani": "Пагани",
+    "McLaren": "Макларен",
+    "Senna": "Сенна",
+
+    # Немецкое дополнение
+    "BMW i3": "БМВ i3",
+    "BMW i8": "БМВ i8",
+    "Mercedes-AMG": "Мерседес-AMG",
+    "AMG": "AMG",
+    "Maybach": "Майбах",
+    "Porsche": "Порше",
+    "Cayenne": "Кайен",
+    "Panamera": "Панамера",
+    "Taycan": "Тайкан",
+
+    # Корейские / премиум
+    "Genesis": "Дженезис",
+    "G70": "G70",
+    "G80": "G80",
+    "G90": "G90",
+
+    # Кrossover / популярные модели
+    "Toyota Supra": "Супра",
+    "Toyota C-HR": "C-HR",
+    "Honda CR-V": "Хонда CR-V",
+    "Honda Civic": "Хонда Сивик",
+    "Subaru WRX": "WRX",
+    "Subaru BRZ": "BRZ",
+    "Lexus": "Лексус",
+    "RX": "RX",
+    "NX": "NX",
+    "ES": "ES",
+    "IS": "IS",
+
+    # Китай — дополнительные бренды/модели
+    "Great Wall Motors": "Грейт Уолл",
+    "Neta": "Нета",
+    "Ora": "Ора",
+    "Leapmotor": "Липмотор",
+    "Atto 3": "Атто 3",
+    "Qin": "Цин",
+    "Seal": "Сил",
+    "QQ": "Кью Кью",
+    "Karry": "Карри",
+    "Poer": "Повер",
+    "Voleex": "Волекс",
+    "Steed": "Стиид",
+    "Maxus": "Максус",
+    "Roewe": "Роу",
+    "Wuling": "Вулинг",
+    "Changan": "Чанган",
+    "Baojun": "Баоджун",
+    "Seres": "Серес",
+    "Seres 3": "Серес 3",
+    "Seres 5": "Серес 5",
+
+    # Американские
+    "Chrysler": "Крайслер",
+    "Voyager": "Вояджер",
+    "GMC": "ДжиЭмСи",
+    "Cadillac": "Кадиллак",
+    "Escalade": "Эскадил",
+    "Buick": "Бьюик",
+    "Corvette": "Корвет",
+    "Camaro": "Камаро",
+
+    # Прочие популярные модели (дополнения)
+    "Sportage": "Спортейдж",
+    "K5": "K5",
+    "Sorento Hybrid": "Соренто Гибрид",
+}
+
+# Добавляем в основной словарь только отсутствующие ключи (чтобы не
+# перезаписывать кастомные)
+_added_ext = 0
+for k, v in EXTENDED_CAR_BRANDS.items():
+    if k not in car_brands_models:
+        car_brands_models[k] = v
+        _added_ext += 1
+
+if _added_ext:
+    print(f"[info] Добавлено новых записей из EXTENDED_CAR_BRANDS: {_added_ext}")
 
 def save_additions() -> None:
     try:
@@ -239,7 +360,6 @@ def prepare_additions(base_keys: set, candidates: set, threshold: float = 0.85) 
             continue
         sim = find_similar_word(cand, keys_lower, keys_map, threshold=threshold)
         if sim:
-            # добавляем candidate -> русское название найденного похожего ключа (если есть)
             additions[cand] = car_brands_models.get(sim, sim)
     return additions
 
@@ -258,7 +378,6 @@ def process_text(text: str, base_dict: dict, additions_map: dict, translit_allow
         return text
     def repl(m):
         found = m.group(0)
-        # поиск ключа без учёта регистра
         for k in final_map:
             if k.lower() == found.lower():
                 ru = final_map[k] or k
@@ -279,10 +398,8 @@ def load_external_data(url: str) -> pd.DataFrame:
         if "text/csv" in ct or url.lower().endswith(".csv"):
             return pd.read_csv(io.StringIO(resp.text))
         try:
-            # попытаться как Excel
             return pd.read_excel(io.BytesIO(resp.content))
         except Exception:
-            # fallback CSV
             return pd.read_csv(io.StringIO(resp.text))
     except Exception as e:
         if st:
@@ -313,19 +430,27 @@ def process_file(input_path: str, column: str, external_url: Optional[str], outp
     except Exception as e:
         print("Ошибка чтения файла:", e)
         return
+    print(f"Загружен входной файл: {input_path} ({df.shape[0]} строк x {df.shape[1]} столбцов)")
     if column not in df.columns:
         print("Столбец не найден. Доступные столбцы:", df.columns.tolist())
         return
     external_df = load_external_data(external_url) if external_url else pd.DataFrame()
+    if external_url:
+        if not external_df.empty:
+            print(f"Загружен внешний источник: {external_url} ({external_df.shape[0]} строк x {external_df.shape[1]} столбцов)")
+        else:
+            print(f"Внешний источник {external_url} пуст или не загружен.")
     series = df[column]
     dataset_words = extract_words_from_series(series)
     external_words = extract_words_from_series(external_df.stack()) if not external_df.empty else set()
     base_keys = set(car_brands_models.keys())
     candidates = (dataset_words | external_words) - base_keys
     additions = prepare_additions(base_keys, candidates, threshold=0.85)
-    print(f"Кандидатов для добавления: {len(additions)}")
+    print(f"Найдено кандидатов для добавления: {len(additions)}")
     if additions:
-        # сохраняем найденные кандидаты в локальный набор (как автодобавления)
+        print("Добавленные пары (кандидат -> русское):")
+        for k, v in additions.items():
+            print(" -", k, "→", v)
         added_pairs.update({k: v for k, v in additions.items()})
         car_brands_models.update(additions)
         save_additions()
@@ -338,6 +463,7 @@ def process_file(input_path: str, column: str, external_url: Optional[str], outp
         else:
             df.to_csv(output_path, index=False)
         print("Результат сохранён в:", output_path)
+        print("Чтобы скачать файл — возьмите его из текущей директории или перенесите по FTP/HTTP.")
     except Exception as e:
         print("Ошибка сохранения:", e)
 
@@ -347,7 +473,7 @@ def process_file(input_path: str, column: str, external_url: Optional[str], outp
 def run_streamlit_app() -> None:
     st.set_page_config(page_title="Автообработка расширенная", layout="wide")
     st.title("Обработка названий автомобилей — улучшенная версия")
-    st.markdown("Загрузите файл (CSV/XLSX), укажите URL для расширения словаря.")
+    st.markdown("Загрузите файл (CSV/XLSX), укажите URL для расширения словаря. После обработки появится кнопка скачивания.")
     uploaded_file = st.file_uploader("Файл", type=["xlsx", "xls", "csv"])
     external_url = st.text_input("URL внешнего источника (CSV / XLSX) — необязательно")
     if uploaded_file:
@@ -359,9 +485,10 @@ def run_streamlit_app() -> None:
         except Exception as e:
             st.error(f"Ошибка чтения файла: {e}")
             return
+        st.info(f"Загружен файл: {uploaded_file.name} — {df.shape[0]} строк x {df.shape[1]} столбцов")
+        st.dataframe(df.head(5))
         col = st.selectbox("Столбец для обработки", df.columns.tolist())
 
-        # Добавление новых пар через sidebar
         st.sidebar.header("Добавить новый бренд/модель")
         new_key = st.sidebar.text_input("Ключ (бренд/модель)")
         new_value = st.sidebar.text_input("Русское название или описание")
@@ -381,15 +508,25 @@ def run_streamlit_app() -> None:
 
         if st.button("Обработать"):
             external_df = load_external_data(external_url) if external_url else pd.DataFrame()
+            if external_url:
+                if not external_df.empty:
+                    st.info(f"Внешний источник загружен: {external_url} — {external_df.shape[0]} строк x {external_df.shape[1]} столбцов")
+                    st.dataframe(external_df.head(5))
+                else:
+                    st.warning("Внешний источник пуст или не удалось загрузить.")
             series = df[col]
             dataset_words = extract_words_from_series(series)
             external_words = extract_words_from_series(external_df.stack()) if not external_df.empty else set()
+            st.info(f"Уникальных слов в колонке: {len(dataset_words)}. Во внешнем источнике: {len(external_words)}.")
             base_keys = set(car_brands_models.keys())
             candidates = (dataset_words | external_words) - base_keys
+            st.info(f"Кандидатов (не в словаре): {len(candidates)}. Примеры: {', '.join(list(candidates)[:10])}")
             additions = prepare_additions(base_keys, candidates, threshold=0.85)
             if additions:
                 st.success(f"Найдено {len(additions)} кандидатов — добавлено локально.")
-                # сохраняем
+                st.write("Добавленные пары (немного):")
+                for k, v in list(additions.items())[:50]:
+                    st.write(f"- {k} → {v}")
                 added_pairs.update({k: v for k, v in additions.items()})
                 car_brands_models.update(additions)
                 save_additions()
@@ -405,9 +542,11 @@ def run_streamlit_app() -> None:
                 buf.seek(0)
                 st.download_button("Скачать Excel", buf, "result.xlsx",
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.info("Нажмите кнопку, чтобы скачать готовый Excel файл.")
             else:
                 csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
                 st.download_button("Скачать CSV", csv_bytes, "result.csv", mime="text/csv")
+                st.info("Нажмите кнопку, чтобы скачать готовый CSV файл.")
 
 # ---------------------------
 # Запуск
