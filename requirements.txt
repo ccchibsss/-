@@ -1,4 +1,4 @@
 streamlit
 pandas
-transliterate
-openpyxl
+requests
+pymorphy2[cyrillic]
