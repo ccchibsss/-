@@ -1,5 +1,5 @@
 pymorphy2
-setuptools
+setuptools<58
 streamlit
 pandas
 requests
