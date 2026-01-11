@@ -26,7 +26,6 @@ except Exception:
     alt = None
 
 # Попытка подключить pymorphy2 для корректного склонения русских слов
-# (опционально)
 try:
     import pymorphy2  # type: ignore
     morph = pymorphy2.MorphAnalyzer()
@@ -74,7 +73,7 @@ car_brands_models = {
     "RS5": "Эр Эс 5", "TT": "ТТ", "Volkswagen": "Фольксваген", "Golf": "Гольф",
     "Passat": "Пассат", "Tiguan": "Тигуан", "Touareg": "Туарег", "Jetta": "Джетта",
     "Arteon": "Артеон", "Skoda": "Шкода", "Octavia": "Октавия", "Superb": "Суперб",
-    "Kodiaq": "Кодьяк", "Karoq": "Кароак", "Fabia": "Фабия", "Yeti": "Йети",
+    "Kodiaq": "Кодьяк", "Karoq": "Кароак", "Fабия": "Фабия", "Yeti": "Йети",
     "Ford": "Форд", "Fiesta": "Фиеста", "Focus": "Фокус", "Mustang": "Мустанг",
     "Ranger": "Рейнджер", "Bronco": "Бронко", "Chevrolet": "Шевроле", "Aveo": "Авео",
     "Lacetti": "Лачетти", "Malibu": "Мальбу", "Trailblazer": "Трейлблейзер",
@@ -86,7 +85,7 @@ car_brands_models = {
     "Tipo": "Типо", "Lancia": "Ланча", "Alfa Romeo": "Альфа Ромео", "Giulia": "Джулия",
     "Stelvio": "Стельвио", "Suzuki": "Сузуки", "Honda": "Хонда", "Dacia": "Дачия",
     "SsangYong": "СангЁнг",
-    # --- дополнительный расширенный набор ---
+    # добавлены дополнительные бренды и модели
     "Nissan": "Ниссан", "Altima": "Альтима", "Sentra": "Сентра", "Maxima": "Максима",
     "Rogue": "Роудж", "X-Trail": "Икс-Трэйл", "Qashqai": "Кашкай", "Leaf": "Лиф",
     "Titan": "Титан", "Navara": "Навара", "Patrol": "Патрол", "Murano": "Муранo",
@@ -134,7 +133,6 @@ if os.path.exists(ADDITIONS_FILE):
                 added_pairs = {str(k): str(v) for k, v in loaded.items()}
                 car_brands_models.update(added_pairs)
     except Exception:
-        # Игнорируем ошибки загрузки -- продолжим с базовой картой
         pass
 
 # ---------------------------
@@ -142,7 +140,6 @@ if os.path.exists(ADDITIONS_FILE):
 # ---------------------------
 @lru_cache(maxsize=10000)
 def decline_word_cached(word: str) -> str:
-    # Если pymorphy2 не установлен, возвращаем слово как есть
     if not word or morph is None:
         return word
     try:
@@ -153,8 +150,7 @@ def decline_word_cached(word: str) -> str:
         return word
 
 # ---------------------------
-# Транслитерация латиницы -> кириллицы
-# Быстрая реализация с упорядоченными правилами (длинные замены первыми)
+# Транслитерация латиницы → кириллицы
 # ---------------------------
 LAT_TO_CYR_RULES = [
     ("shch", "щ"), ("sch", "щ"), ("sht", "шт"),
@@ -173,7 +169,6 @@ LAT_TO_CYR_RULES = [
 _LAT_RULES_SORTED = sorted(LAT_TO_CYR_RULES, key=lambda x: -len(x[0]))
 
 def latin_to_cyrillic(text: str) -> str:
-    # Транслитерирует только слова с латиницей, сохраняет регистр первого символа/всех символов
     if not isinstance(text, str) or not text:
         return text
     def translit_word(word: str) -> str:
@@ -216,7 +211,6 @@ def contains_cyrillic(text: str) -> bool:
 
 # ---------------------------
 # Построение финальной структуры для быстрого поиска
-# Компилируем один регексп + делаем маппинг lower->(orig, ru_decl)
 # ---------------------------
 def build_final_struct(base_map: Dict[str, str], additions: Dict[str, str]) -> Dict:
     final_map = {**base_map, **(additions or {})}
@@ -247,11 +241,11 @@ def process_text_fast(text: str, final_struct: Dict, translit_allowed: bool = Tr
     if pattern is None:
         return text
     def repl(m):
-        found = m.group(0)
-        info = mapping.get(found.lower())
+        f = m.group(0)
+        info = mapping.get(f.lower())
         if info:
-            return f"{found} ({info[1]})"
-        return found
+            return f"{f} ({info[1]})"
+        return f
     return pattern.sub(repl, text)
 
 # ---------------------------
@@ -277,8 +271,7 @@ def count_matches_in_series_fast(series: pd.Series, final_struct: Dict) -> pd.Se
     return s.sort_values(ascending=False)
 
 # ---------------------------
-# Оптимизированное сопоставление похожих слов:
-# Сравниваем только с ключами близкой длины (быстрее на больших словарях)
+# Оптимизированное сопоставление похожих слов
 # ---------------------------
 def find_similar_word_fast(word: str, keys_list: List[str], keys_map: Dict[str, str], threshold: float = 0.85) -> Optional[str]:
     if not word:
@@ -289,7 +282,6 @@ def find_similar_word_fast(word: str, keys_list: List[str], keys_map: Dict[str, 
     best_key = None
     for k in keys_list:
         lk = len(k)
-        # пропускаем ключи, длина которых слишком отличается
         if abs(lk - lw) > max(2, int(0.4 * max(lk, lw))):
             continue
         ratio = SequenceMatcher(None, w, k).ratio()
@@ -413,28 +405,15 @@ def run_streamlit_app() -> None:
             st.info("Новые кандидаты не найдены по выбранному порогу.")
 
         final_struct = build_final_struct(car_brands_models, additions)
+        # Создаем новый столбец с обработанным текстом, оставляя оригинал
         df["_processed"] = df[col].fillna("").astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=translit_allowed))
-
-        st.subheader("Статистика совпадений")
-        counts = count_matches_in_series_fast(df[col], final_struct)
-        total = int(counts.sum()) if not counts.empty else 0
-        st.metric("Всего вхождений найденных ключей", total)
-        if not counts.empty:
-            top = counts.head(top_n)
-            st.dataframe(top.reset_index().rename(columns={"index":"key", 0:"count"}))
-            if alt is not None:
-                chart_df = top.reset_index().rename(columns={0:"count", "index":"key"})
-                c = alt.Chart(chart_df).mark_bar().encode(
-                    x=alt.X("count:Q", title="Количество"),
-                    y=alt.Y("key:N", sort='-x', title="Ключ"),
-                    color=alt.Color("count:Q", scale=alt.Scale(scheme="greens"))
-                ).properties(height=min(400, 30 * len(chart_df)))
-                st.altair_chart(c, use_container_width=True)
-            else:
-                st.bar_chart(top)
-
-        st.subheader("Превью обработанных строк")
-        st.dataframe(df[[col, "_processed"]].rename(columns={col: "original", "_processed": "processed"}).head(200))
+        
+        # Показываем оба столбца: оригинал и обработанный
+        st.dataframe(
+            df[[col, "_processed"]]
+            .rename(columns={col: "Исходник", "_processed": "Обработанный"})
+            .head(200)
+        )
 
         # Подсветка совпадений HTML
         patt = final_struct.get("pattern")
@@ -459,7 +438,7 @@ def run_streamlit_app() -> None:
         table_html = "<table style='width:100%;border-collapse:collapse'><thead><tr><th>Оригинал</th><th>Подсветка</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
         st.markdown(table_html, unsafe_allow_html=True)
 
-        # Экспорт результата
+        # Экспорт результата с сохранением всех колонок
         export = st.radio("Формат экспорта", ("CSV", "Excel"))
         if export == "Excel":
             buf = io.BytesIO()
@@ -513,7 +492,6 @@ def process_file_cli(input_path: str, column: str, external_url: Optional[str], 
 # Точка входа
 # ---------------------------
 def main():
-    # Если streamlit доступен, запускаем UI
     if st:
         run_streamlit_app()
         return
