@@ -1,6 +1,6 @@
-# optimized_car_processing_with_ru_comments.py
-# Ускорённая версия скрипта обработки названий автомобилей.
-# Комментарии на русском, добавлена расширенная база брендов/моделей.
+# optimized_car_processing_with_ru_comments_fixed.py
+# Исправленная версия: убраны дубликаты, синтаксические ошибки и добавлены
+# недостающие ключи.
 from __future__ import annotations
 import io
 import re
@@ -37,221 +37,161 @@ ADDITIONS_FILE = "additional_brands.json"
 
 # ---------------------------
 # Большой словарь брендов/моделей (англ -> рус)
-# Здесь объединены первоначальный и расширенный списки — можно дополнять.
+# Объединённый и очищенный (без дубликатов, с исправленными ключами).
 # ---------------------------
-car_brands_models = {
-    "BMW": "БМВ", "1 Series": "1 Серия", "2 Series": "2 Серия", "3 Series": "3 Серия",
-    "4 Series": "4 Серия", "5 Series": "5 Серия", "6 Series": "6 Серия", "7 Series": "7 Серия",
-    "8 Series": "8 Серия", "X1": "Икс 1", "X2": "Икс 2", "X3": "Икс 3", "X4": "Икс 4",
-    "X5": "Икс 5", "X6": "Икс 6", "X7": "Икс 7", "Z4": "Зет 4", "M3": "Эм 3", "M5": "Эм 5",
-    "M Series": "Эм Серия", "Mercedes-Benz": "Мерседес-Бенц", "A-Class": "А-Класс",
-    "B-Class": "Б-Класс", "C-Class": "С-Класс", "E-Class": "Е-Класс", "S-Class": "Си-Класс",
+car_brands_models: Dict[str, str] = {
+    "BMW": "БМВ",
+    "1 Series": "1 Серия", "2 Series": "2 Серия", "3 Series": "3 Серия",
+    "4 Series": "4 Серия", "5 Series": "5 Серия", "6 Series": "6 Серия",
+    "7 Series": "7 Серия", "8 Series": "8 Серия",
+    "X1": "Икс 1", "X2": "Икс 2", "X3": "Икс 3", "X4": "Икс 4",
+    "X5": "Икс 5", "X6": "Икс 6", "X7": "Икс 7", "Z4": "Зет 4",
+    "M3": "Эм 3", "M5": "Эм 5", "M Series": "Эм Серия",
+
+    "Mercedes-Benz": "Мерседес-Бенц", "Mercedes": "Мерседес",
+    "A-Class": "А-Класс", "B-Class": "Б-Класс", "C-Class": "С-Класс",
+    "E-Class": "Е-Класс", "S-Class": "Си-Класс", "CLA": "CLA", "GLA": "GLA",
     "GLC": "ГЛЦ", "GLE": "ГЛЕ", "GLS": "ГЛС", "G-Class": "Г-Класс", "CLS": "ЦЛС",
-    "Vito": "Вито", "Sprinter": "Спринтер",
-    "Toyota": "Тойота", "Corolla": "Королла", "Camry": "Камри", "RAV4": "Рав 4", "Prius": "Приус",
-    "Land Cruiser": "Ленд Крузер", "Yaris": "Ярис", "Highlander": "Хайлендер", "Hilux": "Хайлюкс",
-    "Sienta": "Сента", "Avensis": "Авенсис",
-    "Mazda": "Мазда", "Mazda3": "Мазда 3", "Mazda6": "Мазда 6", "CX-3": "Кс 3", "CX-5": "Кс 5",
-    "CX-9": "Кс 9", "MX-5": "МХ 5", "Subaru": "Субару", "Impreza": "Импреза", "Forester": "Форестер",
-    "Outback": "Аутбек", "XV": "Икс ВИ",
-    "Kia": "Киа", "Rio": "Рио", "Ceed": "Сид", "Sportage": "Спортейдж", "Sorento": "Соренто",
-    "Soul": "Соул", "Optima": "Оптима", "Carnival": "Карнавал", "Stinger": "Стингер",
-    "Hyundai": "Хёндай", "Elantra": "Элантра", "Sonata": "Соната", "Tucson": "Тусон",
-    "Santa Fe": "Санта Фе", "Kona": "Кона", "Veloster": "Велюстер",
-    "BYD": "БайДжи", "Han": "Хан", "Tang": "Танг", "Song": "Сонг", "Dolphin": "Дельфин",
-    "F3": "Ф3", "F7": "Ф7", "Geely": "Джили", "Atlas": "Атлас", "Tiggo": "Тигго",
-    "Coolray": "Кулрэй", "Emgrand": "Эмгранд", "Binrui": "Бинрай", "Chery": "Черри",
-    "Tiggo 7": "Тигго 7", "Arrizo": "Аризо", "Exeed": "Эксид", "JAC": "Джак", "Refine": "Рефайн",
-    "S2": "Эс 2", "S3": "Эс 3", "Megan": "Меган", "Lifan": "Лифан", "Baojun": "Баоцзюнь",
-    "Hongqi": "Хунци", "FAW": "Фав", "Bestune": "Бестюн", "Levdeo": "Левдео", "Wey": "Вей",
-    "Yema": "Йема",
-    "Lada": "Лада", "Vesta": "Веста", "Granta": "Гранта", "Kalina": "Калина", "Niva": "Нива",
-    "UAZ": "УАЗ", "Gaz": "Газ", "ZAZ": "Заз", "Vaz": "Ваз", "Lada Priora": "Лада Приора",
-    "Lada 4x4": "Лада 4х4", "Lada XRay": "Лада Xray",
-    "Audi": "Ауди", "A1": "А1", "A3": "А3", "A4": "А4", "A6": "А6", "A8": "А8",
-    "Q3": "Кью 3", "Q5": "Кью 5", "Q7": "Кью 7", "Q8": "Кью 8", "RS3": "Эр Эс 3",
-    "RS5": "Эр Эс 5", "TT": "ТТ", "Volkswagen": "Фольксваген", "Golf": "Гольф",
-    "Passat": "Пассат", "Tiguan": "Тигуан", "Touareg": "Туарег", "Jetta": "Джетта",
-    "Arteon": "Артеон", "Skoda": "Шкода", "Octavia": "Октавия", "Superb": "Суперб",
-    "Kodiaq": "Кодьяк", "Karoq": "Кароак", "Fабия": "Фабия", "Yeti": "Йети",
-    "Ford": "Форд", "Fiesta": "Фиеста", "Focus": "Фокус", "Mustang": "Мустанг",
-    "Ranger": "Рейнджер", "Bronco": "Бронко", "Chevrolet": "Шевроле", "Aveo": "Авео",
-    "Lacetti": "Лачетти", "Malibu": "Мальбу", "Trailblazer": "Трейлблейзер",
-    "Tahoe": "Тахо", "Silverado": "Сильверадо",
-    "Peugeot": "Пежо", "208": "208", "308": "308", "508": "508", "3008": "3008",
-    "5008": "5008", "Expert": "Эксперт", "Renault": "Рено", "Clio": "Клио", "Megane": "Меган",
-    "Captur": "Каптюр", "Kangoo": "Кангру", "Koleos": "Колеос", "Duster": "Дастер",
-    "Logan": "Логан", "Sandero": "Сандеро", "Fiat": "Фиат", "Panda": "Панда", "500": "500",
-    "Tipo": "Типо", "Lancia": "Ланча", "Alfa Romeo": "Альфа Ромео", "Giulia": "Джулия",
-    "Stelvio": "Стельвио", "Suzuki": "Сузуки", "Honda": "Хонда", "Dacia": "Дачия",
-    "SsangYong": "СангЁнг",
-    # добавлены дополнительные бренды и модели
-    "Nissan": "Ниссан", "Altima": "Альтима", "Sentra": "Сентра", "Maxima": "Максима",
-    "Rogue": "Роудж", "X-Trail": "Икс-Трэйл", "Qashqai": "Кашкай", "Leaf": "Лиф",
-    "Titan": "Титан", "Navara": "Навара", "Patrol": "Патрол", "Murano": "Муранo",
-    "Avalon": "Эвалон", "Venza": "Венза", "C-HR": "C-HR", "Tacoma": "Такома", "Tundra": "Тундра",
-    "Accord": "Акорд", "Civic": "Сивик", "Fit": "Фит", "Jazz": "Джаз",
-    "CR-V": "CR-V", "HR-V": "HR-V", "Pilot": "Пилот", "Odyssey": "Одиссея",
-    "Mazda2": "Мазда 2", "Mazda CX-30": "Мазда CX-30", "MX-30": "Мазда MX-30",
-    "Legacy": "Легаси", "BRZ": "BRZ", "Crosstrek": "Кросстрек",
-    "L200": "L200", "ASX": "ASX", "Eclipse Cross": "Иклепс Кросс",
-    "Swift": "Свифт", "Ignis": "Игнис", "Vitara": "Витара",
-    "Seltos": "Селтос", "Stonic": "Стонік",
-    "i30": "i30", "i20": "i20", "Palisade": "Палисад", "Kona Electric": "Кона Электрик",
-    "i4": "i4", "iX": "iX",
-    "Polestar": "Полистар", "Polestar 2": "Полистар 2",
-    "Polestar 3": "Полистар 3", "Lucid": "Лусид", "Air": "Эйр",
-    "Rivian": "Ривиан", "R1T": "R1T", "NIO": "Нио", "ES6": "ES6", "ES7": "ES7", "XPeng": "ХПэнг", "P7": "P7",
-    "Tesla": "Тесла", "Model S": "Модель S", "Model 3": "Модель 3", "Model X": "Модель X", "Model Y": "Модель Y",
-    "Volvo": "Вольво", "S60": "S60", "XC40": "XC40", "XC60": "XC60", "XC90": "XC90",
-    "Polo": "Поло", "T-Roc": "T-Roc",
-    "Seat": "Сеат", "Cupra": "Купра",
-    "Mercedes": "Мерседес", "CLA": "CLA", "GLA": "GLA", "Maybach": "Майбах",
-    "Porsche": "Порше", "911": "911", "Cayman": "Кайман", "Macan": "Макан", "Taycan": "Тайкан",
-    "Jaguar": "Ягуар", "Land Rover": "Ленд Ровер", "Range Rover": "Рендж Ровер", "Discovery": "Дискавери",
-    "Mini": "Мини", "Cooper": "Купер",
-    "Ferrari": "Феррари", "Lamborghini": "Ламборгини", "Huracan": "Уракан", "Urus": "Урус",
-    "Maserati": "Мазерати", "Ghibli": "Гибли",
-    "Cruze": "Круз", "Equinox": "Экуинокс", "Blazer": "Блейзер",
-    "GMC": "ДжиЭмСи", "Sierra": "Сиерра", "Cadillac": "Кадиллак", "Escalade": "Эскадил",
-    "Dodge": "Додж", "Challenger": "Челленджер", "Charger": "Чарджер",
-    "Jeep": "Джип", "Wrangler": "Рэнглер", "Grand Cherokee": "Гранд Чероки",
-    "Great Wall": "Грейт Уолл", "Haval": "Хавал", "Ora": "Ора", "Neta": "Нета",
-    "Wuling": "Вулинг", "Roewe": "Роу",
-    "Hybrid": "Гибрид", "Plug-in Hybrid": "Подключаемый гибрид", "Electric": "Электро",
-    "BMW": "БМВ", "1 Series": "1 Серия", "2 Series": "2 Серия", "3 Series": "3 Серия",
-    "4 Series": "4 Серия", "5 Series": "5 Серия", "6 Series": "6 Серия", "7 Series": "7 Серия",
-    "8 Series": "8 Серия", "X1": "Икс 1", "X2": "Икс 2", "X3": "Икс 3", "X4": "Икс 4",
-    "X5": "Икс 5", "X6": "Икс 6", "X7": "Икс 7", "Z4": "Зет 4", "M3": "Эм 3", "M5": "Эм 5",
-    "M Series": "Эм Серия", "Mercedes-Benz": "Мерседес-Бенц", "A-Class": "А-Класс",
-    "B-Class": "Б-Класс", "C-Class": "С-Класс", "E-Class": "Е-Класс", "S-Class": "Си-Класс",
-    "GLC": "ГЛЦ", "GLE": "ГЛЕ", "GLS": "ГЛС", "G-Class": "Г-Класс", "CLS": "ЦЛС",
-    "Vito": "Вито", "Sprinter": "Спринтер",
-    "Toyota": "Тойота", "Corolla": "Королла", "Camry": "Камри", "RAV4": "Рав 4", "Prius": "Приус",
-    "Land Cruiser": "Ленд Крузер", "Yaris": "Ярис", "Highlander": "Хайлендер", "Hilux": "Хайлюкс",
-    "Sienta": "Сента", "Avensis": "Авенсис",
-    "Mazda": "Мазда", "Mazda3": "Мазда 3", "Mazda6": "Мазда 6", "CX-3": "Кс 3", "CX-5": "Кс 5",
-    "CX-9": "Кс 9", "MX-5": "МХ 5", "Subaru": "Субару", "Impreza": "Импреза", "Forester": "Форестер",
-    "Outback": "Аутбек", "XV": "Икс ВИ",
-    "Kia": "Киа", "Rio": "Рио", "Ceed": "Сид", "Sportage": "Спортейдж", "Sorento": "Соренто",
-    "Soul": "Соул", "Optima": "Оптима", "Carnival": "Карнавал", "Stinger": "Стингер",
-    "Hyundai": "Хёндай", "Elantra": "Элантра", "Sonata": "Соната", "Tucson": "Тусон",
-    "Santa Fe": "Санта Фе", "Kona": "Кона", "Veloster": "Велюстер",
-    "BYD": "БайДжи", "Han": "Хан", "Tang": "Танг", "Song": "Сонг", "Dolphin": "Дельфин",
-    "F3": "Ф3", "F7": "Ф7", "Geely": "Джили", "Atlas": "Атлас", "Tiggo": "Тигго",
-    "Coolray": "Кулрэй", "Emgrand": "Эмгранд", "Binrui": "Бинрай", "Chery": "Черри",
-    "Tiggo 7": "Тигго 7", "Arrizo": "Аризо", "Exeed": "Эксид", "JAC": "Джак", "Refine": "Рефайн",
-    "S2": "Эс 2", "S3": "Эс 3", "Megan": "Меган", "Lifan": "Лифан", "Baojun": "Баоцзюнь",
-    "Hongqi": "Хунци", "FAW": "Фав", "Bestune": "Бестюн", "Levdeo": "Левдео", "Wey": "Вей",
-    "Yema": "Йема",
-    "Lada": "Лада", "Vesta": "Веста", "Granta": "Гранта", "Kalina": "Калина", "Niva": "Нива",
-    "UAZ": "УАЗ", "Gaz": "Газ", "ZAZ": "Заз", "Vaz": "Ваз", "Lada Priora": "Лада Приора",
-    "Lada 4x4": "Лада 4х4", "Lada XRay": "Лада Xray",
-    "Audi": "Ауди", "A1": "А1", "A3": "А3", "A4": "А4", "A6": "А6", "A8": "А8",
-    "Q3": "Кью 3", "Q5": "Кью 5", "Q7": "Кью 7", "Q8": "Кью 8", "RS3": "Эр Эс 3",
-    "RS5": "Эр Эс 5", "TT": "ТТ", "Volkswagen": "Фольксваген", "Golf": "Гольф",
-    "Passat": "Пассат", "Tiguan": "Тигуан", "Touareg": "Туарег", "Jetta": "Джетта",
-    "Arteon": "Артеон", "Skoda": "Шкода", "Octavia": "Октавия", "Superb": "Суперб",
-    "Kodiaq": "Кодьяк", "Karoq": "Кароак", "Fабия": "Фабия", "Yeti": "Йети",
-    "Ford": "Форд", "Fiesta": "Фиеста", "Focus": "Фокус", "Mustang": "Мустанг",
-    "Ranger": "Рейнджер", "Bronco": "Бронко", "Chevrolet": "Шевроле", "Aveo": "Авео",
-    "Lacetti": "Лачетти", "Malibu": "Мальбу", "Trailblazer": "Трейлблейзер",
-    "Tahoe": "Тахо", "Silverado": "Сильверадо",
-    "Peugeot": "Пежо", "208": "208", "308": "308", "508": "508", "3008": "3008",
-    "5008": "5008", "Expert": "Эксперт", "Renault": "Рено", "Clio": "Клио", "Megane": "Меган",
-    "Captur": "Каптюр", "Kangoo": "Кангру", "Koleos": "Колеос", "Duster": "Дастер",
-    "Logan": "Логан", "Sandero": "Сандеро", "Fiat": "Фиат", "Panda": "Панда", "500": "500",
-    "Tipo": "Типо", "Lancia": "Ланча", "Alfa Romeo": "Альфа Ромео", "Giulia": "Джулия",
-    "Stelvio": "Стельвио", "Suzuki": "Сузуки", "Honda": "Хонда", "Dacia": "Дачия",
-    "SsangYong": "СангЁнг",
-    "Nissan": "Ниссан", "Altima": "Альтима", "Sentra": "Сентра", "Maxima": "Максима",
-    "Rogue": "Роудж", "X-Trail": "Икс-Трэйл", "Qashqai": "Кашкай", "Leaf": "Лиф",
-    "Titan": "Титан", "Navara": "Навара", "Patrol": "Патрол", "Murano": "Муранo",
-    "Avalon": "Эвалон", "Venza": "Венза", "C-HR": "C-HR", "Tacoma": "Такома", "Tundra": "Тундра",
-    "Accord": "Акорд", "Civic": "Сивик", "Fit": "Фит", "Jazz": "Джаз",
-    "CR-V": "CR-V", "HR-V": "HR-V", "Pilot": "Пилот", "Odyssey": "Одиссея",
-    "Mazda2": "Мазда 2", "Mazda CX-30": "Мазда CX-30", "MX-30": "Мазда MX-30",
-    "Legacy": "Легаси", "BRZ": "BRZ", "Crosstrek": "Кросстрек",
-    "L200": "L200", "ASX": "ASX", "Eclipse Cross": "Иклепс Кросс",
-    "Swift": "Свифт", "Ignis": "Игнис", "Vitara": "Витара",
-    "Seltos": "Селтос", "Stonic": "Стонік",
-    "i30": "i30", "i20": "i20", "Palisade": "Палисад", "Kona Electric": "Кона Электрик",
-    "i4": "i4", "iX": "iX",
-    "Polestar": "Полистар", "Polestar 2": "Полистар 2",
-    "Polestar 3": "Полистар 3", "Lucid": "Лусид", "Air": "Эйр",
-    "Rivian": "Ривиан", "R1T": "R1T", "NIO": "Нио", "ES6": "ES6", "ES7": "ES7", "XPeng": "ХПэнг", "P7": "P7",
-    "Tesla": "Тесла", "Model S": "Модель S", "Model 3": "Модель 3", "Model X": "Модель X", "Model Y": "Модель Y",
-    "Volvo": "Вольво", "S60": "S60", "S90": "S90", "V60": "V60", "XC40": "XC40", "XC60": "XC60", "XC90": "XC90",
-    "Polo": "Поло", "T-Roc": "T-Roc",
-    "Seat": "Сеат", "Cupra": "Купра",
-    "Mercedes": "Мерседес", "CLA": "CLA", "GLA": "GLA", "Maybach": "Майбах",
-    "Porsche": "Порше", "911": "911", "Cayman": "Кайман", "Macan": "Макан", "Taycan": "Тайкан",
-    "Jaguar": "Ягуар", "Land Rover": "Ленд Ровер", "Range Rover": "Рендж Ровер", "Discovery": "Дискавери",
-    "Mini": "Мини", "Cooper": "Купер",
-    "Ferrari": "Феррари", "Lamborghini": "Ламборгини", "Huracan": "Уракан", "Urus": "Урус",
-    "Maserati": "Мазерати", "Ghibli": "Гибли",
-    "Cruze": "Круз", "Equinox": "Экуинокс", "Blazer": "Блейзер",
-    "GMC": "ДжиЭмСи", "Sierra": "Сиерра", "Cadillac": "Кадиллак", "Escalade": "Эскадил",
-    "Dodge": "Додж", "Challenger": "Челленджер", "Charger": "Чарджер",
-    "Jeep": "Джип", "Wrangler": "Рэнглер", "Grand Cherokee": "Гранд Чероки",
-    "Great Wall": "Грейт Уолл", "Haval": "Хавал", "Ora": "Ора", "Neta": "Нета",
-    "Wuling": "Вулинг", "Roewe": "Роу",
-    "Hybrid": "Гибрид", "Plug-in Hybrid": "Подключаемый гибрид", "Electric": "Электро",
-    # дополнительные / LCV / эв и т.д.
-    "Mercedes": "Мерседес", "eVito": "еВито", "Citan": "Ситан", "V-Class": "В-Класс",
-    "HiAce": "ХайЭйс", "Proace": "Проэйс", "Dyna": "Дайна",
-    "Mazda CX-30": "Мазда CX-30", "MX-30": "Мазда MX-30",
-    "Polestar 2": "Полистар 2", "Polestar 3": "Полистар 3",
-    "Ioniq 5": "Ионик 5", "Ioniq 6": "Ионик 6", "Hyundai Ioniq": "Ионик",
-    "Kia EV6": "Киа EV6", "Kia EV9": "Киа EV9",
-    "Skoda Enyaq": "Еняк", "MG": "МиДжи", "MG ZS EV": "МГ ЗС ЕВ",
-    "BYD Tang EV": "Танг ЕВ", "BYD Atto 3": "Атто 3",
-    "Lexus": "Лексус", "RX": "РХ", "NX": "НХ", "ES": "ЕС", "LS": "ЛС", "UX": "ЮИкс", "GX": "ДжиИкс",
-    "Infiniti": "Инфинити", "Q50": "Кью50", "Q60": "Кью60", "QX50": "Кью Икс50",
-    "Acura": "Акура", "MDX": "МДХ", "RDX": "РДХ",
-    "Aston Martin": "Астон Мартин", "DB11": "ДБ11", "Vantage": "Вантаж",
-    "Bentley": "Бентли", "Continental": "Континенталь", "Flying Spur": "Флайинг Спур",
-    "Rolls-Royce": "Роллс-Ройс", "Phantom": "Фантом", "Cullinan": "Каллинан",
-    "Opel": "Опель", "Astra": "Астра", "Corsa": "Корса", "Insignia": "Инсигния",
-    "Vivaro": "Виваро", "Movano": "Мовано", "Combo": "Комбо",
-    "Vauxhall": "Воксхолл",
-    "Peugeot Partner": "Пежо Партнёр", "Citroen": "Ситроен", "Berlingo": "Берлинго", "Jumper": "Джампер",
-    "Iveco": "Ивеко", "Daily": "Дейли",
-    "Fiat Professional": "Фиат Профешионал",
-    "Ford Transit Custom": "Транзит Кастом", "Transit Connect": "Транзит Коннект",
-    "Ford Courier": "Форд Курьер", "Ford Galaxy": "Форд Гэлакси",
-    "Volkswagen Caravelle": "Каравелле", "Multivan": "Мультивэн",
-    "Renault Kangoo Express": "Кангру Экспресс", "Renault Trafic Passenger": "Трафик Пассенджер",
-    "Nissan NV200": "НВ200", "e-NV200": "е-НВ200", "NV300": "НВ300", "NV400": "НВ400",
+    "Vito": "Вито", "eVito": "еВито", "Sprinter": "Спринтер", "Citan": "Ситан", "V-Class": "В-Класс",
+
+    "Toyota": "Тойота", "Corolla": "Королла", "Camry": "Камри", "RAV4": "Рав 4",
+    "Prius": "Приус", "Land Cruiser": "Ленд Крузер", "Yaris": "Ярис",
+    "Highlander": "Хайлендер", "Hilux": "Хайлюкс", "Sienta": "Сента",
+    "Avensis": "Авенсис", "HiAce": "ХайЭйс", "Proace": "Проэйс", "Dyna": "Дайна",
     "Toyota Hiace Commuter": "ХайЭйс Комьютер", "Toyota Proace City": "Проэйс Сити",
-    "Mitsubishi L300": "Л300", "Isuzu N-Series": "Исузу N-Серия",
-    "Chevrolet Express": "Экспресс", "GMC Savana": "Савана",
-    "Maxus": "Максус", "V80": "В80", "G10": "Г10",
-    "LDV": "ЛДВ", "V80 LDV": "В80 ЛДВ",
-    "Foton": "Фотон", "View": "Вью",
-    "Changan": "Чанган", "Omoda": "Омода",
-    "Dongfeng": "Донгфэнг", "SouEast": "СаутИст",
-    "Tata": "Тата", "Mahindra": "Махиндра",
-    "Korando": "Корандo", "Tivoli": "Тиволи", "Suzuki Carry": "Сузуки Кэрри",
-    "Ford Transit": "Транзит", "Ford Transit Van": "Транзит Фургон",
-    "Renault Master": "Мастер", "Renault Master Van": "Мастер Фургон",
-    "Peugeot Boxer": "Пежо Боксер", "Citroen Jumper": "Ситроен Джампер",
-    "Fiat Ducato Maxi": "Дукато Макси", "Iveco Daily Van": "Ивеко Дейли Фургон",
-    "Mercedes Sprinter Crew": "Спринтер Крю", "Mercedes Vito Mixto": "Вито Миксто",
+    "Corolla Cross": "Королла Кросс", "C-HR": "C-HR",
+
+    "Mazda": "Мазда", "Mazda3": "Мазда 3", "Mazda6": "Мазда 6", "Mazda2": "Мазда 2",
+    "Mazda CX-30": "Мазда CX-30", "Mazda CX-5": "Мазда CX-5", "MX-5": "МХ 5", "MX-30": "Мазда MX-30",
+
+    "Subaru": "Субару", "Impreza": "Импреза", "Forester": "Форестер",
+    "Outback": "Аутбек", "XV": "Икс ВИ", "BRZ": "BRZ", "Crosstrek": "Кросстрек", "Legacy": "Легаси",
+
+    "Kia": "Киа", "Rio": "Рио", "Ceed": "Сид", "Sportage": "Спортейдж", "Sorento": "Соренто",
+    "Soul": "Соул", "Optima": "Оптима", "Carnival": "Карнавал", "Stinger": "Стингер",
+    "Kia Stonic": "Стонік", "Kia Seltos": "Селтос", "Seltos": "Селтос", "Stonic": "Стонік",
+    "Kia EV6": "Киа EV6", "Kia EV9": "Киа EV9",
+
+    "Hyundai": "Хёндай", "Elantra": "Элантра", "Sonata": "Соната", "Tucson": "Тусон",
+    "Santa Fe": "Санта Фе", "Kona": "Кона", "Kona Electric": "Кона Электрик",
+    "Palisade": "Палисад", "i30": "i30", "i20": "i20", "i4": "i4", "iX": "iX",
+    "Hyundai Ioniq": "Ионик", "Ioniq 5": "Ионик 5", "Ioniq 6": "Ионик 6", "Hyundai Santa Cruz": "Санта Крус",
+
+    "BYD": "БайДжи", "Han": "Хан", "Tang": "Танг", "Song": "Сонг", "Dolphin": "Дельфин",
+    "BYD Tang EV": "Танг ЕВ", "BYD Atto 3": "Атто 3",
+
+    "Geely": "Джили", "Atlas": "Атлас", "Tiggo": "Тигго", "Tiggo 7": "Тигго 7", "Coolray": "Кулрэй",
+    "Emgrand": "Эмгранд", "Binrui": "Бинрай",
+
+    "Chery": "Черри", "Arrizo": "Аризо", "Exeed": "Эксид",
+
+    "JAC": "Джак", "Refine": "Рефайн",
+
+    "Lifan": "Лифан", "F3": "Ф3", "F7": "Ф7", "Baojun": "Баоцзюнь",
+    "Hongqi": "Хунци", "FAW": "Фав", "Bestune": "Бестюн", "Levdeo": "Левдео", "Wey": "Вей", "Yema": "Йема",
+
+    "Lada": "Лада", "Vesta": "Веста", "Granta": "Гранта", "Kalina": "Калина", "Niva": "Нива",
+    "Lada Priora": "Лада Приора", "Lada 4x4": "Лада 4х4", "Lada XRay": "Лада Xray",
+
+    "UAZ": "УАЗ", "Patriot": "Патриот", "Hunter": "Хантер", "Pickup": "Пикап",
+
+    "Gaz": "Газ", "GAZelle": "ГАЗель", "GAZelle Next": "ГАЗель Некст", "Gazelle Next": "ГАЗель Некст",
+    "Sobol": "Соболь", "Sobol 4x4": "Соболь 4х4",
+
+    "ZAZ": "Заз", "Vaz": "Ваз",
+
+    "Audi": "Ауди", "A1": "А1", "A3": "А3", "A4": "А4", "A6": "А6", "A8": "А8", "TT": "ТТ",
+    "Q3": "Кью 3", "Q5": "Кью 5", "Q7": "Кью 7", "Q8": "Кью 8", "RS3": "Эр Эс 3", "RS5": "Эр Эс 5",
+
+    "Volkswagen": "Фольксваген", "Golf": "Гольф", "Polo": "Поло", "Passat": "Пассат",
+    "Tiguan": "Тигуан", "Touareg": "Туарег", "Jetta": "Джетта", "Arteon": "Артеон",
+    "Transporter": "Транспортер", "Caddy": "Кэдди", "Crafter": "Крафтер",
+    "Volkswagen Caravelle": "Каравелле", "Multivan": "Мультивэн", "ID.3": "АйДи.3", "ID.4": "АйДи.4", "ID.Buzz": "АйДи.Базз",
+
+    "Skoda": "Шкода", "Octavia": "Октавия", "Superb": "Суперб", "Kodiaq": "Кодьяк", "Karoq": "Кароак",
+    "Fabia": "Фабия", "Yeti": "Йети", "Skoda Enyaq": "Еняк",
+
+    "Ford": "Форд", "Fiesta": "Фиеста", "Focus": "Фокус", "Mustang": "Мустанг",
+    "Ranger": "Рейнджер", "Bronco": "Бронко", "Transit": "Транзит", "Transit Custom": "Транзит Кастом",
+    "Transit Connect": "Транзит Коннект", "Ford Transit Van": "Транзит Фургон", "Ford Courier": "Форд Курьер", "Ford Galaxy": "Форд Гэлакси",
     "e-Transit": "е-Транзит", "eSprinter": "еСпринтер", "eVito Tourer": "еВито Турайер",
-    "ID.3": "АйДи.3", "ID.4": "АйДи.4", "ID.Buzz": "АйДи.Базз",
-    "Kangoo ZE": "Кангру ЗЕ",
+
+    "Chevrolet": "Шевроле", "Aveo": "Авео", "Lacetti": "Лачетти", "Malibu": "Мальбу",
+    "Cruze": "Круз", "Equinox": "Экуинокс", "Blazer": "Блейзер", "Tahoe": "Тахо", "Silverado": "Сильверадо",
+    "Chevrolet Express": "Экспресс",
+
+    "Peugeot": "Пежо", "208": "208", "308": "308", "508": "508", "3008": "3008", "5008": "5008",
+    "Partner": "Партнёр", "Peugeot Partner": "Пежо Партнёр", "Boxer": "Боксер", "Peugeot Boxer": "Пежо Боксер",
+
+    "Renault": "Рено", "Clio": "Клио", "Megane": "Меган", "Captur": "Каптюр",
+    "Kangoo": "Кангру", "Kangoo Van": "Кангру Ван", "Kangoo Express": "Кангру Экспресс", "Kangoo ZE": "Кангру ЗЕ",
+    "Trafic": "Трафик", "Master": "Мастер", "Renault Master": "Мастер", "Renault Master Van": "Мастер Фургон",
+    "Renault Kangoo Express": "Кангру Экспресс", "Renault Trafic Passenger": "Трафик Пассенджер", "Koleos": "Колеос", "Duster": "Дастер", "Logan": "Логан", "Sandero": "Сандеро", "Koleos": "Колеос", "Kangoo": "Кангру",
+
+    "Fiat": "Фиат", "Panda": "Панда", "500": "500", "Tipo": "Типо", "Ducato": "Дукато",
+    "Ducato Maxi": "Дукато Макси", "Fiat Ducato Maxi": "Дукато Макси", "Doblo": "Добло", "Fiorino": "Фиорино", "Talento": "Таленто",
+    "Fiat Professional": "Фиат Профешионал",
+
+    "Lancia": "Ланча",
+
+    "Alfa Romeo": "Альфа Ромео", "Giulia": "Джулия", "Stelvio": "Стельвио",
+
+    "Suzuki": "Сузуки", "Swift": "Свифт", "Ignis": "Игнис", "Vitara": "Витара", "Suzuki Carry": "Сузуки Кэрри",
+
+    "Honda": "Хонда", "Accord": "Акорд", "Civic": "Сивик", "Fit": "Фит", "Jazz": "Джаз", "CR-V": "CR-V", "HR-V": "HR-V", "Pilot": "Пилот", "Odyssey": "Одиссея",
+
+    "Mitsubishi": "Митсубиси", "Outlander": "Аутлендер", "Pajero": "Паджеро", "ASX": "ASX", "L200": "L200", "Mitsubishi L300": "Л300", "Eclipse Cross": "Иклепс Кросс",
+
+    "Isuzu": "Исузу", "D-Max": "Ди-Макс", "Isuzu N-Series": "Исузу N-Серия",
+
+    "Nissan": "Ниссан", "Altima": "Альтима", "Sentra": "Сентра", "Maxima": "Максима", "Rogue": "Роудж",
+    "X-Trail": "Икс-Трэйл", "Qashqai": "Кашкай", "Leaf": "Лиф", "Titan": "Титан", "Navara": "Навара", "Patrol": "Патрол", "Murano": "Муранo", "Avalon": "Эвалон", "Venza": "Венза", "Tacoma": "Такома", "Tundra": "Тундра", "Nissan NV200": "НВ200", "e-NV200": "е-НВ200", "NV300": "НВ300", "NV400": "НВ400", "Nissan Patrol Y62": "Патрол Y62",
+
+    "Polestar": "Полистар", "Polestar 2": "Полистар 2", "Polestar 3": "Полистар 3",
+
+    "Lucid": "Лусид", "Air": "Эйр",
+    "Rivian": "Ривиан", "R1T": "R1T",
+    "NIO": "Нио", "ES6": "ES6", "ES7": "ES7",
+    "XPeng": "ХПэнг", "P7": "P7",
+
+    "Tesla": "Тесла", "Model S": "Модель S", "Model 3": "Модель 3", "Model X": "Модель X", "Model Y": "Модель Y",
+
+    "Volvo": "Вольво", "S60": "S60", "S90": "S90", "V60": "V60", "XC40": "XC40", "XC60": "XC60", "XC90": "XC90",
+
+    "Seat": "Сеат", "Cupra": "Купра",
+    "Porsche": "Порше", "911": "911", "Cayman": "Кайман", "Macan": "Макан", "Taycan": "Тайкан",
+    "Jaguar": "Ягуар", "Land Rover": "Ленд Ровер", "Range Rover": "Рендж Ровер", "Discovery": "Дискавери",
+
+    "Mini": "Мини", "Cooper": "Купер",
+    "Ferrari": "Феррари", "Lamborghini": "Ламборгини", "Huracan": "Уракан", "Urus": "Урус",
+    "Maserati": "Мазерати", "Ghibli": "Гибли",
+
+    "GMC": "ДжиЭмСи", "Sierra": "Сиерра", "Cadillac": "Кадиллак", "Escalade": "Эскадил",
+
+    "Dodge": "Додж", "Challenger": "Челленджер", "Charger": "Чарджер",
+
+    "Jeep": "Джип", "Wrangler": "Рэнглер", "Grand Cherokee": "Гранд Чероки",
+
+    "Great Wall": "Грейт Уолл", "Haval": "Хавал", "Haval H9": "Хавал Н9", "Ora": "Ора", "Neta": "Нета", "Wuling": "Вулинг", "Roewe": "Роу", "Great Wall Wingle": "Вингл", "Great Wall Poer": "Поэр", "Gonow": "Гонов",
+
+    "Opel": "Опель", "Astra": "Астра", "Corsa": "Корса", "Insignia": "Инсигния", "Vivaro": "Виваро", "Movano": "Мовано", "Combo": "Комбо", "Vauxhall": "Воксхолл",
+
+    "Peugeot Partner": "Пежо Партнёр", "Citroen": "Ситроен", "Berlingo": "Берлинго", "Jumper": "Джампер", "Citroen Jumper": "Ситроен Джампер",
+
+    "Iveco": "Ивеко", "Daily": "Дейли", "Iveco Daily Van": "Ивеко Дейли Фургон",
+
+    "Maxus": "Максус", "V80": "В80", "G10": "Г10", "V80 LDV": "В80 ЛДВ", "LDV": "ЛДВ",
+
+    "Foton": "Фотон", "View": "Вью",
+
+    "Changan": "Чанган", "Omoda": "Омода", "Dongfeng": "Донгфэнг", "SouEast": "СаутИст",
+
+    "Tata": "Тата", "Mahindra": "Махиндра",
+
+    # типы/аббревиатуры
+    "Hybrid": "Гибрид", "Plug-in Hybrid": "Подключаемый гибрид", "Electric": "Электро",
     "Van": "Фургон", "Minivan": "Минивэн", "MPV": "МПВ", "Pickup": "Пикап", "Crew Cab": "Дабл Кэб",
     "Chassis Cab": "Шасси-Кабина", "Panel Van": "Панель Ван",
-    "Kia Stonic": "Стонік", "Kia Seltos": "Селтос", "Hyundai Santa Cruz": "Санта Крус",
-    "Renault Koleos": "Колеос", "Suzuki Ignis": "Игнис", "Subaru Crosstrek": "Кросстрек",
-    "Toyota Corolla Cross": "Королла Кросс", "Honda HR-V": "HR-V", "Honda CR-V": "CR-V",
-    "Mazda CX-5": "Мазда CX-5", "Mitsubishi Eclipse Cross": "Иклепс Кросс",
-    "Nissan Patrol Y62": "Патрол Y62",
-    "Gazelle Next": "ГАЗель Некст", "Sobol 4x4": "Соболь 4х4",
-    "Haval H9": "Хавал Н9", "Great Wall Wingle": "Вингл", "Great Wall Poer": "Поэр",
-    "Gonow": "Гонов",
-}
 }
 
 # ---------------------------
@@ -345,14 +285,14 @@ def contains_cyrillic(text: str) -> bool:
 # ---------------------------
 # Построение финальной структуры для быстрого поиска
 # ---------------------------
-def build_final_struct(base_map: Dict[str, str], additions: Dict[str, str]) -> Dict:
+def build_final_struct(base_map: Dict[str, str], additions: Optional[Dict[str, str]] = None) -> Dict:
     final_map = {**base_map, **(additions or {})}
     if not final_map:
         return {"pattern": None, "map": {}, "len_max": 0}
     keys_sorted = sorted(final_map.keys(), key=len, reverse=True)
     escaped = [re.escape(k) for k in keys_sorted if k.strip()]
     pattern = re.compile(r'(?<!\w)(?:' + "|".join(escaped) + r')(?!\w)', flags=re.IGNORECASE)
-    mapping = {}
+    mapping: Dict[str, tuple] = {}
     for k in keys_sorted:
         ru = final_map.get(k) or k
         ru_decl = decline_word_cached(ru)
@@ -474,6 +414,8 @@ def save_additions():
 # Streamlit приложение (улучшенная визуализация)
 # ---------------------------
 def run_streamlit_app() -> None:
+    if st is None:
+        return
     st.set_page_config(page_title="Автообработка (ускорено)", layout="wide")
     st.title("Распознавание брендов/моделей — ускорённый модуль")
     st.markdown("Загрузите CSV/XLSX, выберите столбец — скрипт автоматически подсветит и добавит переводы.")
@@ -481,7 +423,6 @@ def run_streamlit_app() -> None:
     # Настройки в сайдбаре
     sidebar = st.sidebar
     threshold = sidebar.slider("Порог похожести для автодобавления", 0.6, 0.99, 0.85, 0.01)
-    top_n = sidebar.slider("Топ N для графика", 5, 50, 15)
     translit_allowed = sidebar.checkbox("Автотранслитерация (латиница→кириллица)", value=True)
 
     # Добавление новых пар вручную
@@ -538,10 +479,8 @@ def run_streamlit_app() -> None:
             st.info("Новые кандидаты не найдены по выбранному порогу.")
 
         final_struct = build_final_struct(car_brands_models, additions)
-        # Создаем новый столбец с обработанным текстом, оставляя оригинал
         df["_processed"] = df[col].fillna("").astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=translit_allowed))
-        
-        # Показываем оба столбца: оригинал и обработанный
+
         st.dataframe(
             df[[col, "_processed"]]
             .rename(columns={col: "Исходник", "_processed": "Обработанный"})
