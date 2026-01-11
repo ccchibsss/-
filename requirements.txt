@@ -1,4 +1,5 @@
+pymorphy2
+setuptools
 streamlit
 pandas
 requests
-pymorphy2
