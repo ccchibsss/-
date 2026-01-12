@@ -3,8 +3,11 @@ import os
 import re
 import json
 import numpy as np
-import pandas as pd
 from functools import lru_cache
+import pandas as pd
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 # Попытка импортировать streamlit для веб-интерфейса
 try:
@@ -16,45 +19,84 @@ except ImportError:
 try:
     import pymorphy2
     morph = pymorphy2.MorphAnalyzer()
-except:
+except ImportError:
     morph = None
 
 # Основной словарь брендов и моделей
 car_brands_models: dict = {
     "BMW": "БМВ",
-    "1 Series": "1 Серия", "2 Series": "2 Серия", "3 Series": "3 Серия",
-    "4 Series": "4 Серия", "5 Series": "5 Серия", "6 Series": "6 Серия",
-    "7 Series": "7 Серия", "8 Series": "8 Серия",
-    "X1": "Икс 1", "X2": "Икс 2", "X3": "Икс 3", "X4": "Икс 4",
-    "X5": "Икс 5", "X6": "Икс 6", "X7": "Икс 7", "Z4": "Зет 4",
-    "M3": "Эм 3", "M5": "Эм 5", "M Series": "Эм Серия",
-    "Mercedes-Benz": "Мерседес-Бенц", "Mercedes": "Мерседес",
+    "1 Series": "1 Серия",
+    "2 Series": "2 Серия",
+    "3 Series": "3 Серия",
+    "4 Series": "4 Серия",
+    "5 Series": "5 Серия",
+    "6 Series": "6 Серия",
+    "7 Series": "7 Серия",
+    "8 Series": "8 Серия",
+    "X1": "Икс 1",
+    "X2": "Икс 2",
+    "X3": "Икс 3",
+    "X4": "Икс 4",
+    "X5": "Икс 5",
+    "X6": "Икс 6",
+    "X7": "Икс 7",
+    "Z4": "Зет 4",
+    "M3": "Эм 3",
+    "M5": "Эм 5",
+    "M Series": "Эм Серия",
+    "Mercedes-Benz": "Мерседес-Бенц",
+    "Mercedes": "Мерседес",
 }
 
 ADDITIONS_FILE = "additional_brands.json"
 
 # --- Функции для работы с пользовательским словарём ---
 
-def load_user_additions() -> dict:
-    if os.path.exists(ADDITIONS_FILE):
+def load_user_additions(filepath=ADDITIONS_FILE) -> dict:
+    if os.path.exists(filepath):
         try:
-            with open(ADDITIONS_FILE, "r", encoding="utf-8") as f:
+            with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if isinstance(data, dict):
-                    return {str(k): str(v) for k, v in data.items()}
-        except:
-            pass
+            if isinstance(data, dict):
+                return {str(k): str(v) for k, v in data.items()}
+        except Exception as e:
+            logging.warning(f"Ошибка загрузки пользовательских данных: {e}")
     return {}
 
-def save_user_additions(data: dict) -> None:
+def save_user_additions(data: dict, filepath=ADDITIONS_FILE) -> None:
     try:
-        with open(ADDITIONS_FILE, "w", encoding="utf-8") as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-    except:
-        pass
+    except Exception as e:
+        logging.warning(f"Ошибка сохранения пользовательских данных: {e}")
 
-added_pairs: dict = load_user_additions()
-car_brands_models.update(added_pairs)
+def load_brands_from_file(filepath: str) -> dict:
+    """
+    Загружает словарь брендов и моделей из файла (Excel или CSV).
+    Формат файла: две колонки - ключ и значение.
+    """
+    try:
+        if filepath.lower().endswith(('.xls', '.xlsx')):
+            df = pd.read_excel(filepath)
+        elif filepath.lower().endswith('.csv'):
+            df = pd.read_csv(filepath)
+        else:
+            print("Некupported формат файла для словаря.")
+            return {}
+        result = {}
+        for _, row in df.iterrows():
+            if len(row) >= 2:
+                key = str(row[0]).strip()
+                val = str(row[1]).strip()
+                if key and val:
+                    result[key] = val
+        return result
+    except Exception as e:
+        print(f"Ошибка при загрузке файла словаря: {e}")
+        return {}
+
+# Загруженные и объединённые словари
+added_pairs: dict = {}
 
 # --- Склонение и транслитерация ---
 
@@ -64,11 +106,12 @@ def decline_word_cached(word: str) -> str:
         return word
     try:
         p = morph.parse(word)[0]
-        inf = p.inflect({"nomn"})
-        return inf.word if inf else p.word
-    except:
+        inflected = p.inflect({"nomn"})
+        return inflected.word if inflected else p.word
+    except Exception:
         return word
 
+# Правила транслитерации
 LAT_TO_CYR_RULES = [
     ("shch", "щ"), ("sch", "щ"), ("sht", "шт"),
     ("oye", "ое"), ("oyu", "ою"), ("iya", "ия"), ("iye", "ие"),
@@ -246,10 +289,18 @@ def run_streamlit_app():
                         user_dict[key] = val
             if user_dict:
                 st.sidebar.success(f"Загружено {len(user_dict)} пар из пользовательского файла.")
-        except:
-            st.sidebar.error("Ошибка при чтении файла.")
+        except Exception as e:
+            st.sidebar.error(f"Ошибка при чтении файла: {e}")
 
-    current_dict = {**car_brands_models, **user_dict}
+    # Обновляем основной словарь
+    global added_pairs
+    added_pairs = load_user_additions()
+    if user_dict:
+        added_pairs.update(user_dict)
+        save_user_additions(added_pairs)
+
+    current_dict = {**car_brands_models, **added_pairs}
+
     threshold = st.sidebar.slider("Порог похожести для автодобавления", 0.6, 0.99, 0.8, 0.01)
     translit_allowed = st.sidebar.checkbox("Автотранслитерация", value=True)
 
@@ -289,6 +340,7 @@ def run_streamlit_app():
         base_keys = set(current_dict.keys())
         candidates = (dataset_words | external_words) - base_keys
 
+        # Создаём дополнения
         additions = prepare_additions_fast(base_keys, candidates, threshold=threshold)
         if additions:
             current_dict.update(additions)
@@ -320,7 +372,6 @@ def run_streamlit_app():
             buf.seek(0)
             st.download_button("Скачать CSV", buf, file_name="result.csv", mime="text/csv")
 
-
 # --- CLI режим ---
 
 def extract_words_from_text(text: str) -> set:
@@ -342,8 +393,8 @@ def process_file_cli(input_path: str, column: str, external_url: str, output_pat
             df = pd.read_excel(input_path)
         else:
             df = pd.read_csv(input_path)
-    except:
-        print("Ошибка чтения файла.")
+    except Exception as e:
+        print(f"Ошибка чтения файла: {e}")
         return
 
     if column not in df.columns:
@@ -383,9 +434,8 @@ def process_file_cli(input_path: str, column: str, external_url: str, output_pat
         else:
             df.to_csv(output_path, index=False)
         print(f"Результат сохранен в {output_path}")
-    except:
-        print("Ошибка сохранения файла.")
-
+    except Exception as e:
+        print(f"Ошибка сохранения файла: {e}")
 
 # --- Основной запуск ---
 
@@ -400,24 +450,12 @@ def main():
     parser.add_argument("--dict", help="Путь к пользовательскому словарю (XLSX или CSV)")
     args = parser.parse_args()
 
-    # Загрузка пользовательского словаря
+    # Загружаем пользовательский словарь из файла, если указан
+    global added_pairs
     if args.dict:
-        try:
-            if args.dict.lower().endswith(('.xls', '.xlsx')):
-                df_dict = pd.read_excel(args.dict)
-            elif args.dict.lower().endswith('.csv'):
-                df_dict = pd.read_csv(args.dict)
-            else:
-                print("Неподдерживаемый формат файла словаря.")
-                df_dict = pd.DataFrame()
-            for _, row in df_dict.iterrows():
-                if len(row) >= 2:
-                    key = str(row[0]).strip()
-                    val = str(row[1]).strip()
-                    if key and val:
-                        car_brands_models[key] = val
-        except:
-            pass
+        custom_dict = load_brands_from_file(args.dict)
+        added_pairs.update(custom_dict)
+        save_user_additions(added_pairs)
 
     if args.list:
         print("Всего ключей:", len(car_brands_models))
