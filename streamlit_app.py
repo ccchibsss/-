@@ -1,7 +1,7 @@
 # !/usr/bin/env python3
-# integrated_car_processing_with_dict_load_fixed_csv_encoding.py
-# Исправления: при чтении/записи CSV используется utf-8-sig (BOM) чтобы Excel
-# корректно видел русские символы.
+# integrated_car_processing_with_dict_load_fixed_csv_encoding_with_custom_format.py
+# Полный скрипт с интеграцией format_custom и сохранением CSV в utf-8-sig для
+# корректного отображения в Excel.
 
 from __future__ import annotations
 import io
@@ -23,16 +23,12 @@ try:
 except Exception:
     st = None
 try:
-    import altair as alt  # type: ignore
-except Exception:
-    alt = None
-try:
     import pymorphy2  # type: ignore
     morph = pymorphy2.MorphAnalyzer()
 except Exception:
     morph = None
 
-CSV_ENCODING = "utf-8-sig"  # Используем BOM-совместимую кодировку для CSV (Excel-friendly)
+CSV_ENCODING = "utf-8-sig"  # BOM-friendly для Excel
 ADDITIONS_FILE = "additional_brands.json"
 
 # Базовый словарь (англ -> рус)
@@ -137,7 +133,6 @@ car_brands_models: Dict[str, str] = {
     "Foton": "Фотон", "View": "Вью",
     "Changan": "Чанган", "Omoda": "Омода", "Dongfeng": "Донгфэнг", "SouEast": "СаутИст",
     "Tata": "Тата", "Mahindra": "Махиндра",
-    # типы/аббревиатуры
     "Hybrid": "Гибрид", "Plug-in Hybrid": "Подключаемый гибрид", "Electric": "Электро",
     "Van": "Фургон", "Minivan": "Минивэн", "MPV": "МПВ", "Pickup": "Пикап", "Crew Cab": "Дабл Кэб",
     "Chassis Cab": "Шасси-Кабина", "Panel Van": "Панель Ван",
@@ -237,23 +232,76 @@ def build_final_struct(base_map: Dict[str, str], additions: Optional[Dict[str, s
         mapping[k.lower()] = (k, ru_decl)
     return {"pattern": pattern, "map": mapping, "len_max": max((len(k) for k in final_map.keys()), default=0)}
 
+def format_custom(text: str, final_struct: Dict) -> str:
+    """
+    Попытка извлечь бренд/модель и диапазон лет, вернуть отформатированную строку.
+    Использует final_struct["map"] где значения — (orig, ru_decl).
+    """
+    if not isinstance(text, str) or not final_struct:
+        return text
+    # Найти диапазон лет вида "2010~2015", "2010 ~ 2015", "2010-2015"
+    years_match = re.search(r'(\d{4}\s*(?:[~\-–]\s*)\d{4})', text)
+    years = years_match.group(1) if years_match else ""
+
+    # Удаляем диапазон лет из текста для поиска бренда/модели
+    text_no_years = text.replace(years, "").strip()
+
+    # Ищем слова или фрагменты в скобках как кандидаты на бренд/модель
+    pattern_pairs = re.findall(r'\([^\)]+\)|[A-Za-z0-9\-\.]+|[А-Яа-я0-9\-\.]+', text_no_years)
+    brand = ""
+    model = ""
+
+    if pattern_pairs:
+        brand_candidate = pattern_pairs[0]
+        model_candidate = pattern_pairs[1] if len(pattern_pairs) > 1 else ""
+
+        # Удаляем скобки и лишние пробелы
+        brand = re.sub(r'^[\(\s]+|[\)\s]+$', '', brand_candidate)
+        model = re.sub(r'^[\(\s]+|[\)\s]+$', '', model_candidate)
+
+    # Получение переводов из карты (map хранит (orig, ru_decl))
+    mp = final_struct.get("map", {})
+    ru_brand = ""
+    ru_model = ""
+    if brand:
+        val = mp.get(brand.lower())
+        ru_brand = val[1] if isinstance(val, (list, tuple)) and len(val) > 1 else ""
+    if model:
+        val = mp.get(model.lower())
+        ru_model = val[1] if isinstance(val, (list, tuple)) and len(val) > 1 else ""
+
+    # Формируем финальный текст
+    pieces = []
+    if brand:
+        pieces.append(brand)
+    if model:
+        pieces.append(model)
+    main = " ".join(pieces).strip() or text.strip()
+    extras = []
+    if ru_brand:
+        extras.append(ru_brand)
+    if ru_model:
+        extras.append(ru_model)
+    if years:
+        # добавим годы и в основную часть, и в скобки
+        main = f"{main} {years}" if main else years
+        extras.append(years)
+    if extras:
+        return f"{main} ({' '.join(extras).strip()})"
+    return main
+
 def process_text_fast(text: str, final_struct: Dict, translit_allowed: bool = True) -> str:
+    """
+    Теперь process_text_fast использует format_custom для извлечения бренд/модель/лет.
+    При этом сохраняется поведение автотранслитерации для случаев, когда
+    текст полностью латиницей и нет кириллицы.
+    """
     if not isinstance(text, str) or not final_struct:
         return text
     if translit_allowed and contains_latin(text) and not contains_cyrillic(text):
         cyr = latin_to_cyrillic(text)
         return f"{text} ({decline_word_cached(cyr)})"
-    pattern = final_struct.get("pattern")
-    mapping = final_struct.get("map", {})
-    if pattern is None:
-        return text
-    def repl(m):
-        f = m.group(0)
-        info = mapping.get(f.lower())
-        if info:
-            return f"{f} ({info[1]})"
-        return f
-    return pattern.sub(repl, text)
+    return format_custom(text, final_struct)
 
 def count_matches_in_series_fast(series: pd.Series, final_struct: Dict) -> pd.Series:
     if series is None or series.empty:
@@ -337,7 +385,6 @@ def save_additions():
     except Exception:
         pass
 
-# --------- Загрузка внешнего словаря (файл или URL) ----------
 def parse_mapping_from_dataframe(df: pd.DataFrame) -> Dict[str, str]:
     if df is None or df.empty:
         return {}
@@ -364,29 +411,19 @@ def parse_mapping_from_dataframe(df: pd.DataFrame) -> Dict[str, str]:
     return {}
 
 def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None) -> Dict[str, str]:
-    """
-    Load dictionary mapping (eng->rus) from:
-      - fileobj (uploaded file-like object, BytesIO, etc.)
-      - source: URL (http/https) or local path
-    Supports JSON (object), CSV/XLSX two-column or columns named key/value.
-    Uses utf-8-sig decoding for CSV/text to handle BOM and Excel.
-    """
     def try_parse_bytes(bts: bytes) -> Dict[str, str]:
         text = bts.decode(CSV_ENCODING, errors="ignore")
-        # JSON
         try:
             j = json.loads(text)
             if isinstance(j, dict):
                 return {str(k): str(v) for k, v in j.items()}
         except Exception:
             pass
-        # CSV
         try:
             df = pd.read_csv(io.StringIO(text))
             return parse_mapping_from_dataframe(df)
         except Exception:
             pass
-        # Excel fallback
         try:
             df = pd.read_excel(io.BytesIO(bts))
             return parse_mapping_from_dataframe(df)
@@ -394,7 +431,6 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
             pass
         return {}
 
-    # Try fileobj first
     if fileobj is not None:
         try:
             if hasattr(fileobj, "seek"):
@@ -402,13 +438,11 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
                     fileobj.seek(0)
                 except Exception:
                     pass
-            # read raw
             if hasattr(fileobj, "read"):
                 raw = fileobj.read()
                 if isinstance(raw, bytes):
                     return try_parse_bytes(raw)
                 if isinstance(raw, str):
-                    # string already decoded
                     try:
                         j = json.loads(raw)
                         if isinstance(j, dict):
@@ -448,7 +482,6 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
         except Exception:
             pass
 
-    # Try source (URL or local path)
     if source:
         try:
             if source.startswith("http"):
@@ -463,7 +496,6 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
                     txt = r.content.decode(CSV_ENCODING, errors="ignore")
                     df = pd.read_csv(io.StringIO(txt))
                     return parse_mapping_from_dataframe(df)
-                # try excel
                 try:
                     df = pd.read_excel(io.BytesIO(r.content))
                     return parse_mapping_from_dataframe(df)
@@ -475,7 +507,6 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
                     except Exception:
                         return {}
             else:
-                # local path
                 if os.path.exists(source):
                     if source.lower().endswith(".json"):
                         with open(source, "r", encoding="utf-8") as f:
@@ -485,7 +516,6 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
                     if source.lower().endswith((".xls", ".xlsx")):
                         df = pd.read_excel(source)
                         return parse_mapping_from_dataframe(df)
-                    # fallback csv
                     try:
                         df = pd.read_csv(source, encoding=CSV_ENCODING)
                         return parse_mapping_from_dataframe(df)
@@ -507,7 +537,6 @@ def run_streamlit_app() -> None:
     threshold = sidebar.slider("Порог похожести для автодобавления", 0.6, 0.99, 0.85, 0.01)
     translit_allowed = sidebar.checkbox("Автотранслитерация (латиница→кириллица)", value=True)
 
-    # загрузка внешнего словаря через sidebar
     sidebar.header("Загрузить словарь (опционально)")
     dict_file = sidebar.file_uploader("Файл словаря (json/csv/xlsx)", type=["json", "csv", "xls", "xlsx"])
     dict_url = sidebar.text_input("URL словаря (json/csv/xlsx) — опционально")
@@ -528,7 +557,6 @@ def run_streamlit_app() -> None:
         else:
             st.info("Словарь не загружен или пустой")
 
-    # ручное добавление
     sidebar.header("Добавить пару в словарь")
     new_k = sidebar.text_input("Ключ (англ)")
     new_v = sidebar.text_input("Русское название")
@@ -549,15 +577,12 @@ def run_streamlit_app() -> None:
         return
 
     try:
-        # uploaded обычно является BytesIO/SpooledTemporaryFile; указываем кодировку для CSV
         if uploaded.name.lower().endswith(('.xls', '.xlsx')):
             df = pd.read_excel(uploaded)
         else:
-            # для безопасного чтения используем decode через getvalue если нужно
             try:
                 df = pd.read_csv(uploaded, encoding=CSV_ENCODING)
             except Exception:
-                # fallback: decode bytes and read from StringIO
                 raw = uploaded.getvalue()
                 txt = raw.decode(CSV_ENCODING, errors="ignore") if isinstance(raw, (bytes, bytearray)) else str(raw)
                 df = pd.read_csv(io.StringIO(txt))
@@ -597,7 +622,6 @@ def run_streamlit_app() -> None:
             .head(200)
         )
 
-        # HTML подсветка
         patt = final_struct.get("pattern")
         mapping = final_struct.get("map", {})
         def highlight_html(text: str) -> str:
@@ -627,7 +651,6 @@ def run_streamlit_app() -> None:
             buf.seek(0)
             st.download_button("Скачать Excel", buf, file_name="result.xlsx")
         else:
-            # экспорт с BOM (utf-8-sig) — Excel корректно распознает русские символы
             csv_str = df.to_csv(index=False)
             csv_bytes = csv_str.encode(CSV_ENCODING)
             st.download_button("Скачать CSV", csv_bytes, file_name="result.csv", mime="text/csv")
@@ -645,7 +668,6 @@ def process_file_cli(input_path: str, column: str, external_url: Optional[str], 
     if column not in df.columns:
         print("Столбец не найден. Доступные:", df.columns.tolist())
         return
-    # загрузить внешний словарь если указан
     if dict_source:
         loaded = load_dictionary(source=dict_source)
         if loaded:
@@ -672,7 +694,6 @@ def process_file_cli(input_path: str, column: str, external_url: Optional[str], 
         if output_path.lower().endswith(('.xls', '.xlsx')):
             df.to_excel(output_path, index=False)
         else:
-            # Сохраняем CSV в utf-8-sig, чтобы Excel корректно отображал кириллицу
             df.to_csv(output_path, index=False, encoding=CSV_ENCODING)
         print("Результат сохранён в", output_path)
     except Exception as e:
