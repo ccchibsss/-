@@ -242,6 +242,17 @@ def process_texts_parallel(texts: list, final_struct: dict, translit_allowed: bo
         ]
         return [f.result() for f in futures]
 
+# Новая функция: подготовка дополнений по похожести
+def prepare_additions_fast(base_keys: set, candidates: set, threshold: float=0.8) -> dict:
+    additions = {}
+    for c in candidates:
+        for k in base_keys:
+            sim = similarity_ratio(c.lower(), k.lower())
+            if sim >= threshold:
+                additions[k] = c
+                break
+    return additions
+
 # Веб-интерфейс
 def run_streamlit_app():
     if st is None:
@@ -324,6 +335,7 @@ def run_streamlit_app():
         base_keys = set(current_dict.keys())
         candidates = (dataset_words | external_words) - base_keys
 
+        # Используем новую функцию
         additions = prepare_additions_fast(base_keys, candidates, threshold=threshold)
         if additions:
             current_dict.update(additions)
@@ -355,7 +367,7 @@ def run_streamlit_app():
             buf.seek(0)
             st.download_button("Скачать CSV", buf, file_name="result.csv", mime="text/csv")
 
-# CLI
+# --- CLI ---
 def process_file_cli(input_path: str, column: str, external_url: str, output_path: str):
     try:
         if input_path.lower().endswith(('.xls', '.xlsx')):
@@ -386,6 +398,7 @@ def process_file_cli(input_path: str, column: str, external_url: str, output_pat
     base_keys = set(car_brands_models.keys())
     candidates = (dataset_words | external_words) - base_keys
 
+    # Используем новую функцию
     additions = prepare_additions_fast(base_keys, candidates, threshold=0.85)
     if additions:
         car_brands_models.update(additions)
@@ -406,7 +419,7 @@ def process_file_cli(input_path: str, column: str, external_url: str, output_pat
     except Exception as e:
         print(f"Ошибка сохранения файла: {e}")
 
-# CLI запуск
+# --- Основной запуск ---
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Обработка названий автомобилей")
