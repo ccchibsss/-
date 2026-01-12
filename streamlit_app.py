@@ -9,20 +9,18 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
-# Попытка импортировать streamlit для веб-интерфейса
 try:
     import streamlit as st
 except ImportError:
     st = None
 
-# Попытка импортировать pymorphy2 для склонения слов
 try:
     import pymorphy2
     morph = pymorphy2.MorphAnalyzer()
 except ImportError:
     morph = None
 
-# Основной словарь брендов и моделей
+# Ваш словарь брендов и моделей
 car_brands_models: dict = {
     "BMW": "БМВ",
     "1 Series": "1 Серия",
@@ -50,8 +48,6 @@ car_brands_models: dict = {
 
 ADDITIONS_FILE = "additional_brands.json"
 
-# --- Функции для работы с пользовательским словарём ---
-
 def load_user_additions(filepath=ADDITIONS_FILE) -> dict:
     if os.path.exists(filepath):
         try:
@@ -71,10 +67,6 @@ def save_user_additions(data: dict, filepath=ADDITIONS_FILE) -> None:
         logging.warning(f"Ошибка сохранения пользовательских данных: {e}")
 
 def load_brands_from_file(filepath: str) -> dict:
-    """
-    Загружает словарь брендов и моделей из файла (Excel или CSV).
-    Формат файла: две колонки - ключ и значение.
-    """
     try:
         if filepath.lower().endswith(('.xls', '.xlsx')):
             df = pd.read_excel(filepath)
@@ -95,10 +87,7 @@ def load_brands_from_file(filepath: str) -> dict:
         print(f"Ошибка при загрузке файла словаря: {e}")
         return {}
 
-# Загруженные и объединённые словари
 added_pairs: dict = {}
-
-# --- Склонение и транслитерация ---
 
 @lru_cache(maxsize=10000)
 def decline_word_cached(word: str) -> str:
@@ -111,7 +100,7 @@ def decline_word_cached(word: str) -> str:
     except Exception:
         return word
 
-# Правила транслитерации
+# Транслитерация латиницы в кириллицу
 LAT_TO_CYR_RULES = [
     ("shch", "щ"), ("sch", "щ"), ("sht", "шт"),
     ("oye", "ое"), ("oyu", "ою"), ("iya", "ия"), ("iye", "ие"),
@@ -172,8 +161,6 @@ def contains_latin(text: str) -> bool:
 def contains_cyrillic(text: str) -> bool:
     return bool(re.search(r'[\u0400-\u04FF]', str(text)))
 
-# --- Расстояние Левенштейна и схожесть ---
-
 def levenshtein_distance(s1: str, s2: str) -> int:
     if s1 == s2:
         return 0
@@ -205,8 +192,6 @@ def similarity_ratio(s1: str, s2: str) -> float:
         return 1.0
     dist = levenshtein_distance(s1, s2)
     return 1 - dist / max_len
-
-# --- Структура поиска ---
 
 def build_final_struct(base_map: dict, additions: dict = None) -> dict:
     final_map = {**base_map, **(additions or {})}
@@ -257,8 +242,7 @@ def process_texts_parallel(texts: list, final_struct: dict, translit_allowed: bo
         ]
         return [f.result() for f in futures]
 
-# --- Веб-интерфейс ---
-
+# Веб-интерфейс
 def run_streamlit_app():
     if st is None:
         print("Streamlit не установлен.")
@@ -340,7 +324,6 @@ def run_streamlit_app():
         base_keys = set(current_dict.keys())
         candidates = (dataset_words | external_words) - base_keys
 
-        # Создаём дополнения
         additions = prepare_additions_fast(base_keys, candidates, threshold=threshold)
         if additions:
             current_dict.update(additions)
@@ -355,15 +338,11 @@ def run_streamlit_app():
         texts = series.astype(str).tolist()
         processed_texts = process_texts_parallel(texts, final_struct, translit_allowed)
 
-        # Получаем позицию исходного столбца
         col_idx = df.columns.get_loc(col_name)
-        # Вставляем новый столбец после исходного
         new_col_name = col_name + " (переведённый)"
         df.insert(col_idx + 1, new_col_name, "")
-        # Заполняем новый столбец
         for i, orig in enumerate(texts):
-            ru = processed_texts[i]
-            df.iat[i, col_idx + 1] = f"{orig} ({ru})"
+            df.iat[i, col_idx + 1] = f"{orig} ({processed_texts[i]})"
 
         export_format = st.radio("Экспортировать как", ("CSV", "Excel"))
         buf = io.BytesIO()
@@ -376,21 +355,7 @@ def run_streamlit_app():
             buf.seek(0)
             st.download_button("Скачать CSV", buf, file_name="result.csv", mime="text/csv")
 
-# --- CLI режим ---
-
-def extract_words_from_text(text: str) -> set:
-    return set(re.findall(r'\b\w+\b', text.lower()))
-
-def prepare_additions_fast(base_keys: set, candidates: set, threshold: float=0.8) -> dict:
-    additions = {}
-    for c in candidates:
-        for k in base_keys:
-            sim = similarity_ratio(c.lower(), k.lower())
-            if sim >= threshold:
-                additions[k] = c
-                break
-    return additions
-
+# CLI
 def process_file_cli(input_path: str, column: str, external_url: str, output_path: str):
     try:
         if input_path.lower().endswith(('.xls', '.xlsx')):
@@ -441,8 +406,7 @@ def process_file_cli(input_path: str, column: str, external_url: str, output_pat
     except Exception as e:
         print(f"Ошибка сохранения файла: {e}")
 
-# --- Основной запуск ---
-
+# CLI запуск
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Обработка названий автомобилей")
@@ -454,7 +418,6 @@ def main():
     parser.add_argument("--dict", help="Путь к пользовательскому словарю (XLSX или CSV)")
     args = parser.parse_args()
 
-    # Загружаем пользовательский словарь из файла, если указан
     global added_pairs
     if args.dict:
         custom_dict = load_brands_from_file(args.dict)
@@ -474,7 +437,6 @@ def main():
     output_path = args.output or ("result.xlsx" if args.input.lower().endswith(('.xls', '.xlsx')) else "result.csv")
     process_file_cli(args.input, args.column, args.external or "", output_path)
 
-# --- Запуск ---
 if __name__ == "__main__":
     if st:
         run_streamlit_app()
