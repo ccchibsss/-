@@ -1,7 +1,8 @@
 # !/usr/bin/env python3
-# integrated_car_processing_with_dict_load.py
-# Полный скрипт: распознавание брендов/моделей + загрузка внешнего словаря
-# (файл/URL)
+# integrated_car_processing_with_dict_load_fixed_csv_encoding.py
+# Исправления: при чтении/записи CSV используется utf-8-sig (BOM) чтобы Excel
+# корректно видел русские символы.
+
 from __future__ import annotations
 import io
 import re
@@ -31,6 +32,7 @@ try:
 except Exception:
     morph = None
 
+CSV_ENCODING = "utf-8-sig"  # Используем BOM-совместимую кодировку для CSV (Excel-friendly)
 ADDITIONS_FILE = "additional_brands.json"
 
 # Базовый словарь (англ -> рус)
@@ -312,11 +314,13 @@ def load_external_data(url: str) -> pd.DataFrame:
         resp.raise_for_status()
         ct = resp.headers.get("Content-Type", "").lower()
         if "text/csv" in ct or url.lower().endswith(".csv"):
-            return pd.read_csv(io.StringIO(resp.text))
+            txt = resp.content.decode(CSV_ENCODING, errors="ignore")
+            return pd.read_csv(io.StringIO(txt))
         try:
             return pd.read_excel(io.BytesIO(resp.content))
         except Exception:
-            return pd.read_csv(io.StringIO(resp.text))
+            txt = resp.content.decode(CSV_ENCODING, errors="ignore")
+            return pd.read_csv(io.StringIO(txt))
     except Exception:
         return pd.DataFrame()
 
@@ -365,10 +369,10 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
       - fileobj (uploaded file-like object, BytesIO, etc.)
       - source: URL (http/https) or local path
     Supports JSON (object), CSV/XLSX two-column or columns named key/value.
+    Uses utf-8-sig decoding for CSV/text to handle BOM and Excel.
     """
-    # helper for trying to parse bytes/text
     def try_parse_bytes(bts: bytes) -> Dict[str, str]:
-        text = bts.decode("utf-8", errors="ignore")
+        text = bts.decode(CSV_ENCODING, errors="ignore")
         # JSON
         try:
             j = json.loads(text)
@@ -390,23 +394,21 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
             pass
         return {}
 
-    # Try fileobj first (higher priority)
+    # Try fileobj first
     if fileobj is not None:
         try:
-            # attempt to read raw bytes
             if hasattr(fileobj, "seek"):
                 try:
                     fileobj.seek(0)
                 except Exception:
                     pass
-            # if it's a stream that returns bytes
-            data = None
+            # read raw
             if hasattr(fileobj, "read"):
                 raw = fileobj.read()
-                # if raw is a generator or list, coerce to bytes/str
                 if isinstance(raw, bytes):
                     return try_parse_bytes(raw)
                 if isinstance(raw, str):
+                    # string already decoded
                     try:
                         j = json.loads(raw)
                         if isinstance(j, dict):
@@ -418,32 +420,29 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
                         return parse_mapping_from_dataframe(df)
                     except Exception:
                         pass
-                # If read returned something else, try to convert
-            # If fileobj has a name, use extension-based attempts
             name = getattr(fileobj, "name", "") or ""
             if name.lower().endswith(".json"):
                 try:
-                    if hasattr(fileobj, "read"):
+                    if hasattr(fileobj, "seek"):
                         try:
                             fileobj.seek(0)
                         except Exception:
                             pass
-                        txt = fileobj.read()
-                        if isinstance(txt, bytes):
-                            txt = txt.decode("utf-8", errors="ignore")
-                        j = json.loads(txt)
-                        if isinstance(j, dict):
-                            return {str(k): str(v) for k, v in j.items()}
+                    txt = fileobj.read()
+                    if isinstance(txt, bytes):
+                        txt = txt.decode(CSV_ENCODING, errors="ignore")
+                    j = json.loads(txt)
+                    if isinstance(j, dict):
+                        return {str(k): str(v) for k, v in j.items()}
                 except Exception:
                     pass
-            # generic: try to get bytes via buffer or getvalue
             if hasattr(fileobj, "getvalue"):
                 try:
                     raw = fileobj.getvalue()
                     if isinstance(raw, bytes):
                         return try_parse_bytes(raw)
                     if isinstance(raw, str):
-                        return try_parse_bytes(raw.encode("utf-8", errors="ignore"))
+                        return try_parse_bytes(raw.encode(CSV_ENCODING, errors="ignore"))
                 except Exception:
                     pass
         except Exception:
@@ -461,7 +460,8 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
                     if isinstance(data, dict):
                         return {str(k): str(v) for k, v in data.items()}
                 if "text/csv" in ct or source.lower().endswith(".csv"):
-                    df = pd.read_csv(io.StringIO(r.text))
+                    txt = r.content.decode(CSV_ENCODING, errors="ignore")
+                    df = pd.read_csv(io.StringIO(txt))
                     return parse_mapping_from_dataframe(df)
                 # try excel
                 try:
@@ -469,7 +469,7 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
                     return parse_mapping_from_dataframe(df)
                 except Exception:
                     try:
-                        j = json.loads(r.text)
+                        j = json.loads(r.content.decode(CSV_ENCODING, errors="ignore"))
                         if isinstance(j, dict):
                             return {str(k): str(v) for k, v in j.items()}
                     except Exception:
@@ -487,7 +487,7 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
                         return parse_mapping_from_dataframe(df)
                     # fallback csv
                     try:
-                        df = pd.read_csv(source)
+                        df = pd.read_csv(source, encoding=CSV_ENCODING)
                         return parse_mapping_from_dataframe(df)
                     except Exception:
                         pass
@@ -549,10 +549,18 @@ def run_streamlit_app() -> None:
         return
 
     try:
+        # uploaded обычно является BytesIO/SpooledTemporaryFile; указываем кодировку для CSV
         if uploaded.name.lower().endswith(('.xls', '.xlsx')):
             df = pd.read_excel(uploaded)
         else:
-            df = pd.read_csv(uploaded)
+            # для безопасного чтения используем decode через getvalue если нужно
+            try:
+                df = pd.read_csv(uploaded, encoding=CSV_ENCODING)
+            except Exception:
+                # fallback: decode bytes and read from StringIO
+                raw = uploaded.getvalue()
+                txt = raw.decode(CSV_ENCODING, errors="ignore") if isinstance(raw, (bytes, bytearray)) else str(raw)
+                df = pd.read_csv(io.StringIO(txt))
     except Exception as e:
         st.error(f"Не удалось прочитать файл: {e}")
         return
@@ -619,7 +627,9 @@ def run_streamlit_app() -> None:
             buf.seek(0)
             st.download_button("Скачать Excel", buf, file_name="result.xlsx")
         else:
-            csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
+            # экспорт с BOM (utf-8-sig) — Excel корректно распознает русские символы
+            csv_str = df.to_csv(index=False)
+            csv_bytes = csv_str.encode(CSV_ENCODING)
             st.download_button("Скачать CSV", csv_bytes, file_name="result.csv", mime="text/csv")
 
 # ---------------- CLI режим ----------------
@@ -628,7 +638,7 @@ def process_file_cli(input_path: str, column: str, external_url: Optional[str], 
         if input_path.lower().endswith(('.xls', '.xlsx')):
             df = pd.read_excel(input_path)
         else:
-            df = pd.read_csv(input_path)
+            df = pd.read_csv(input_path, encoding=CSV_ENCODING)
     except Exception as e:
         print("Ошибка чтения файла:", e)
         return
@@ -662,7 +672,8 @@ def process_file_cli(input_path: str, column: str, external_url: Optional[str], 
         if output_path.lower().endswith(('.xls', '.xlsx')):
             df.to_excel(output_path, index=False)
         else:
-            df.to_csv(output_path, index=False)
+            # Сохраняем CSV в utf-8-sig, чтобы Excel корректно отображал кириллицу
+            df.to_csv(output_path, index=False, encoding=CSV_ENCODING)
         print("Результат сохранён в", output_path)
     except Exception as e:
         print("Ошибка сохранения:", e)
