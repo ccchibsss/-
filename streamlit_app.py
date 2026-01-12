@@ -657,13 +657,18 @@ def run_streamlit_app() -> None:
         table_html = "<table style='width:100%;border-collapse:collapse'><thead><tr><th>Оригинал</th><th>Подсветка</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
         st.markdown(table_html, unsafe_allow_html=True)
 
+        # Интегрирован блок экспорта с отладочным выводом перед сохранением
         export = st.radio("Формат экспорта", ("CSV", "Excel"))
         if export == "Excel":
             buf = io.BytesIO()
+            print("Столбцы перед экспортом (Excel):", df.columns)
+            print("Первые строки (Excel):\n", df.head())
             df.to_excel(buf, index=False)
             buf.seek(0)
             st.download_button("Скачать Excel", buf, file_name="result.xlsx")
         else:
+            print("Столбцы перед экспортом (CSV):", df.columns)
+            print("Первые строки (CSV):\n", df.head())
             csv_str = df.to_csv(index=False, encoding=CSV_ENCODING)
             csv_bytes = csv_str.encode(CSV_ENCODING)
             st.download_button("Скачать CSV", csv_bytes, file_name="result.csv", mime="text/csv")
