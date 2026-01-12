@@ -290,14 +290,27 @@ def format_custom(text: str, final_struct: Dict) -> str:
         return f"{main} ({' '.join(extras).strip()})"
     return main
 
+def translate_full_string(text: str, final_struct: Dict) -> str:
+    """
+    Разбивает строку по '/' и применяет format_custom к каждой части,
+    затем собирает результат обратно с разделителем ' / '.
+    """
+    parts = [part.strip() for part in str(text).split('/')]
+    translated_parts = [format_custom(part, final_struct) for part in parts]
+    return " / ".join(translated_parts)
+
 def process_text_fast(text: str, final_struct: Dict, translit_allowed: bool = True) -> str:
     """
-    Теперь process_text_fast использует format_custom для извлечения бренд/модель/лет.
-    При этом сохраняется поведение автотранслитерации для случаев, когда
-    текст полностью латиницей и нет кириллицы.
+    Обновлённая process_text_fast:
+    - Если в строке есть '/', разбивает и обрабатывает каждую часть через translate_full_string.
+    - Иначе — поведение как ранее: автотранслитерация (латиница→кириллица) или format_custom.
     """
     if not isinstance(text, str) or not final_struct:
         return text
+    # Если строка содержит "/", то разобьём и обработаем каждую часть
+    if '/' in text:
+        return translate_full_string(text, final_struct)
+    # Остальная обработка
     if translit_allowed and contains_latin(text) and not contains_cyrillic(text):
         cyr = latin_to_cyrillic(text)
         return f"{text} ({decline_word_cached(cyr)})"
@@ -651,7 +664,7 @@ def run_streamlit_app() -> None:
             buf.seek(0)
             st.download_button("Скачать Excel", buf, file_name="result.xlsx")
         else:
-            csv_str = df.to_csv(index=False)
+            csv_str = df.to_csv(index=False, encoding=CSV_ENCODING)
             csv_bytes = csv_str.encode(CSV_ENCODING)
             st.download_button("Скачать CSV", csv_bytes, file_name="result.csv", mime="text/csv")
 
