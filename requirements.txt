@@ -1,4 +1,10 @@
+# Write a suggested requirements.txt
+REQUIREMENTS = """pandas
+numpy
 streamlit
-pandas
-scikit-learn
-langdetect
+pymorphy2
+openpyxl
+rapidfuzz
+"""
+Path("requirements.txt").write_text(REQUIREMENTS, encoding="utf-8")
+print("Wrote requirements.txt with:", REQUIREMENTS.replace("\n", ", "))
