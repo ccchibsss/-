@@ -1,6 +1,7 @@
 # optimized_car_processing_with_ru_comments_fixed.py
 # Исправленная версия: убраны дубликаты, синтаксические ошибки и добавлены
 # недостающие ключи.
+
 from __future__ import annotations
 import io
 import re
@@ -15,7 +16,7 @@ from functools import lru_cache
 from collections import Counter
 from typing import Optional, Dict, Set, List
 
-# Попытка подключить streamlit/altair для улучшённой визуализации (опционально)
+# Попытка подключить streamlit/altair для улучшенной визуализации (опционально)
 try:
     import streamlit as st  # type: ignore
 except Exception:
@@ -62,7 +63,7 @@ car_brands_models: Dict[str, str] = {
     "Mazda CX-30": "Мазда CX-30", "Mazda CX-5": "Мазда CX-5", "MX-5": "МХ 5", "MX-30": "Мазда MX-30",
     "Subaru": "Субару", "Impreza": "Импреза", "Forester": "Форестер",
     "Outback": "Аутбек", "XV": "Икс ВИ", "BRZ": "BRZ", "Crosstrek": "Кросстрек", "Legacy": "Легаси",
-    "Kia": "Киа", "Rio": "Рио", "Ceed": "Сид", "Sportage": "Спортейдж", "Sorento": "Соренто",
+    "Kia": "Киа", "Rio": "Рио", "Ceed": "Сид", "Sportage": "Спортейдж", "Sorrento": "Соренто",
     "Soul": "Соул", "Optima": "Оптима", "Carnival": "Карнавал", "Stinger": "Стингер",
     "Kia Stonic": "Стонік", "Kia Seltos": "Селтос", "Seltos": "Селтос", "Stonic": "Стонік",
     "Kia EV6": "Киа EV6", "Kia EV9": "Киа EV9",
@@ -89,7 +90,7 @@ car_brands_models: Dict[str, str] = {
     "Volkswagen": "Фольксваген", "Golf": "Гольф", "Polo": "Поло", "Passat": "Пассат",
     "Tiguan": "Тигуан", "Touareg": "Туарег", "Jetta": "Джетта", "Arteon": "Артеон",
     "Transporter": "Транспортер", "Caddy": "Кэдди", "Crafter": "Крафтер",
-    "Volkswagen Caravelle": "Каравелле", "Mултивэн": "Мультивэн", "ID.3": "АйДи.3", "ID.4": "АйДи.4", "ID.Buzz": "АйДи.Базз",
+    "Volkswagen Caravelle": "Каравелле", "Multivan": "Мультивэн", "ID.3": "АйДи.3", "ID.4": "АйДи.4", "ID.Buzz": "АйДи.Базз",
     "Skoda": "Шкода", "Octavia": "Октавия", "Superb": "Суперб", "Kodiaq": "Кодьяк", "Karoq": "Кароак",
     "Fabia": "Фабия", "Yeti": "Йети", "Skoda Enyaq": "Еняк",
     "Ford": "Форд", "Fiesta": "Фиеста", "Focus": "Фокус", "Mustang": "Мустанг",
@@ -324,8 +325,7 @@ def prepare_additions_fast(base_keys: Set[str], candidates: Set[str], threshold:
     for cand in candidates:
         if cand in base_keys:
             continue
-        cand_lower = cand.lower()
-        sim = find_similar_word_fast(cand_lower, keys_lower, keys_map, threshold=threshold)
+        sim = find_similar_word_fast(cand, list(keys_map.keys()), keys_map, threshold=threshold)
         if sim:
             additions[cand] = car_brands_models.get(sim, sim)
     return additions
