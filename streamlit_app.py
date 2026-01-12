@@ -1,7 +1,8 @@
 # !/usr/bin/env python3
 # integrated_car_processing_with_dict_load_fixed_csv_encoding_with_custom_format.py
-# Полный скрипт с интеграцией format_custom и сохранением CSV в utf-8-sig для
-# корректного отображения в Excel.
+# Полный скрипт с интеграцией обновлённых translate_full_string и
+# process_text_fast
+# и сохранением CSV в utf-8-sig для корректного отображения в Excel.
 
 from __future__ import annotations
 import io
@@ -291,26 +292,23 @@ def format_custom(text: str, final_struct: Dict) -> str:
     return main
 
 def translate_full_string(text: str, final_struct: Dict) -> str:
-    """
-    Разбивает строку по '/' и применяет format_custom к каждой части,
-    затем собирает результат обратно с разделителем ' / '.
-    """
     parts = [part.strip() for part in str(text).split('/')]
-    translated_parts = [format_custom(part, final_struct) for part in parts]
+    translated_parts = []
+    for part in parts:
+        translated_part = format_custom(part, final_struct)
+        translated_parts.append(translated_part)
     return " / ".join(translated_parts)
 
 def process_text_fast(text: str, final_struct: Dict, translit_allowed: bool = True) -> str:
     """
-    Обновлённая process_text_fast:
-    - Если в строке есть '/', разбивает и обрабатывает каждую часть через translate_full_string.
-    - Иначе — поведение как ранее: автотранслитерация (латиница→кириллица) или format_custom.
+    Теперь process_text_fast использует translate_full_string для строк с разделителем /
     """
     if not isinstance(text, str) or not final_struct:
         return text
     # Если строка содержит "/", то разобьём и обработаем каждую часть
     if '/' in text:
         return translate_full_string(text, final_struct)
-    # Остальная обработка
+    # Остальной обработка
     if translit_allowed and contains_latin(text) and not contains_cyrillic(text):
         cyr = latin_to_cyrillic(text)
         return f"{text} ({decline_word_cached(cyr)})"
