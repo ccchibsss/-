@@ -1,54 +1,72 @@
-from __future__ import annotations
 import io
-import re
-import sys
-import json
 import os
-import argparse
-import requests
+import re
+import json
+import numpy as np
 import pandas as pd
-from difflib import SequenceMatcher
 from functools import lru_cache
-from collections import Counter
-from typing import Optional, Dict, Set, List
-import concurrent.futures
 
-# Попытка подключить streamlit/altair для визуализации
+# Попытка импортировать streamlit для веб-интерфейса
 try:
-    import streamlit as st  # type: ignore
-except Exception:
+    import streamlit as st
+except ImportError:
     st = None
-try:
-    import altair as alt  # type: ignore
-except Exception:
-    alt = None
 
-# Попытка подключить pymorphy2
+# Попытка импортировать pymorphy2 для склонения слов
 try:
-    import pymorphy2  # type: ignore
+    import pymorphy2
     morph = pymorphy2.MorphAnalyzer()
-except Exception:
+except:
     morph = None
+
+# Основной словарь брендов и моделей
+car_brands_models: dict = {
+    "BMW": "БМВ",
+    "1 Series": "1 Серия", "2 Series": "2 Серия", "3 Series": "3 Серия",
+    "4 Series": "4 Серия", "5 Series": "5 Серия", "6 Series": "6 Серия",
+    "7 Series": "7 Серия", "8 Series": "8 Серия",
+    "X1": "Икс 1", "X2": "Икс 2", "X3": "Икс 3", "X4": "Икс 4",
+    "X5": "Икс 5", "X6": "Икс 6", "X7": "Икс 7", "Z4": "Зет 4",
+    "M3": "Эм 3", "M5": "Эм 5", "M Series": "Эм Серия",
+    "Mercedes-Benz": "Мерседес-Бенц", "Mercedes": "Мерседес",
+}
 
 ADDITIONS_FILE = "additional_brands.json"
 
-# Полный словарь брендов и моделей (часть, можно расширять)
-car_brands_models: Dict[str, str] = {
-    "BMW": "БМВ",
-    "1 Series": "1 Серия", "2 Series": "2 Серия", "3 Series": "3 Серия",
-    # ... (оставьте полный словарь, как в вашем скрипте)
-}
+# --- Функции для работы с пользовательским словарём ---
 
-# --- Обработка морфологии и транслитерации ---
+def load_user_additions() -> dict:
+    if os.path.exists(ADDITIONS_FILE):
+        try:
+            with open(ADDITIONS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return {str(k): str(v) for k, v in data.items()}
+        except:
+            pass
+    return {}
+
+def save_user_additions(data: dict) -> None:
+    try:
+        with open(ADDITIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except:
+        pass
+
+added_pairs: dict = load_user_additions()
+car_brands_models.update(added_pairs)
+
+# --- Склонение и транслитерация ---
+
 @lru_cache(maxsize=10000)
 def decline_word_cached(word: str) -> str:
-    if not word or morph is None:
+    if not word or not morph:
         return word
     try:
         p = morph.parse(word)[0]
         inf = p.inflect({"nomn"})
         return inf.word if inf else p.word
-    except Exception:
+    except:
         return word
 
 LAT_TO_CYR_RULES = [
@@ -70,6 +88,7 @@ _LAT_RULES_SORTED = sorted(LAT_TO_CYR_RULES, key=lambda x: -len(x[0]))
 def latin_to_cyrillic(text: str) -> str:
     if not isinstance(text, str) or not text:
         return text
+
     def translit_word(word: str) -> str:
         lower = word.lower()
         i = 0
@@ -91,8 +110,10 @@ def latin_to_cyrillic(text: str) -> str:
         if word[0].isupper():
             return out_s.capitalize()
         return out_s
+
     parts = re.split(r'(\s+)', text)
     res = []
+
     for p in parts:
         if re.search(r'[A-Za-z]', p):
             pieces = re.split(r'([^A-Za-z]+)', p)
@@ -108,39 +129,84 @@ def contains_latin(text: str) -> bool:
 def contains_cyrillic(text: str) -> bool:
     return bool(re.search(r'[\u0400-\u04FF]', str(text)))
 
-def build_final_struct(base_map: Dict[str, str], additions: Optional[Dict[str, str]] = None) -> Dict:
+# --- Расстояние Левенштейна и схожесть ---
+
+def levenshtein_distance(s1: str, s2: str) -> int:
+    if s1 == s2:
+        return 0
+    len_s1, len_s2 = len(s1), len(s2)
+    if len_s1 == 0:
+        return len_s2
+    if len_s2 == 0:
+        return len_s1
+
+    matrix = np.zeros((len_s1 + 1, len_s2 + 1), dtype=int)
+    for i in range(len_s1 + 1):
+        matrix[i][0] = i
+    for j in range(len_s2 + 1):
+        matrix[0][j] = j
+
+    for i in range(1, len_s1 + 1):
+        for j in range(1, len_s2 + 1):
+            cost = 0 if s1[i - 1] == s2[j - 1] else 1
+            matrix[i][j] = min(
+                matrix[i - 1][j] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j - 1] + cost
+            )
+    return matrix[len_s1][len_s2]
+
+def similarity_ratio(s1: str, s2: str) -> float:
+    max_len = max(len(s1), len(s2))
+    if max_len == 0:
+        return 1.0
+    dist = levenshtein_distance(s1, s2)
+    return 1 - dist / max_len
+
+# --- Структура поиска ---
+
+def build_final_struct(base_map: dict, additions: dict = None) -> dict:
     final_map = {**base_map, **(additions or {})}
     if not final_map:
         return {"pattern": None, "map": {}, "len_max": 0}
+
     keys_sorted = sorted(final_map.keys(), key=len, reverse=True)
     escaped = [re.escape(k) for k in keys_sorted if k.strip()]
     pattern = re.compile(r'(?<!\w)(?:' + "|".join(escaped) + r')(?!\w)', flags=re.IGNORECASE)
-    mapping: Dict[str, tuple] = {}
+
+    mapping: dict = {}
     for k in keys_sorted:
         ru = final_map.get(k) or k
         ru_decl = decline_word_cached(ru)
         mapping[k.lower()] = (k, ru_decl)
+
     return {"pattern": pattern, "map": mapping, "len_max": max((len(k) for k in final_map.keys()), default=0)}
 
 def process_text_fast_core(text: str, final_struct: dict, translit_allowed: bool=True) -> str:
     if not isinstance(text, str) or not final_struct:
         return text
+
     if translit_allowed and contains_latin(text) and not contains_cyrillic(text):
         cyr = latin_to_cyrillic(text)
         return f"{text} ({decline_word_cached(cyr)})"
+
     pattern = final_struct.get("pattern")
     mapping = final_struct.get("map", {})
+
     if not pattern:
         return text
+
     def repl(m):
         f = m.group(0)
         info = mapping.get(f.lower())
         if info:
             return f"{f} ({info[1]})"
         return f
+
     return pattern.sub(repl, str(text))
 
-def process_texts_parallel(texts: List[str], final_struct: dict, translit_allowed: bool=True) -> List[str]:
+def process_texts_parallel(texts: list, final_struct: dict, translit_allowed: bool=True) -> list:
+    import concurrent.futures
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         futures = [
             executor.submit(process_text_fast_core, text, final_struct, translit_allowed)
@@ -148,97 +214,49 @@ def process_texts_parallel(texts: List[str], final_struct: dict, translit_allowe
         ]
         return [f.result() for f in futures]
 
-# --- Вспомогательные функции ---
+# --- Веб-интерфейс ---
 
-def load_external_data(url: Optional[str]) -> pd.DataFrame:
-    if not url:
-        return pd.DataFrame()
-    try:
-        if url.startswith("http://") or url.startswith("https://"):
-            response = requests.get(url)
-            response.raise_for_status()
-            content = io.BytesIO(response.content)
-            if url.lower().endswith(('.xls', '.xlsx')):
-                return pd.read_excel(content)
-            else:
-                return pd.read_csv(content)
-        else:
-            if os.path.exists(url):
-                if url.lower().endswith(('.xls', '.xlsx')):
-                    return pd.read_excel(url)
-                else:
-                    return pd.read_csv(url)
-    except Exception as e:
-        print(f"Ошибка загрузки внешних данных: {e}")
-    return pd.DataFrame()
-
-def extract_words_from_series(series: pd.Series) -> set:
-    words = set()
-    for text in series.dropna():
-        for word in re.findall(r'\b\w+\b', str(text)):
-            words.add(word.lower())
-    return words
-
-def prepare_additions_fast(base_keys: set, candidates: set, threshold: float=0.85) -> Dict[str, str]:
-    additions = {}
-    for candidate in candidates:
-        best_match = None
-        highest_ratio = 0.0
-        for key in base_keys:
-            ratio = SequenceMatcher(None, candidate, key).ratio()
-            if ratio > highest_ratio:
-                highest_ratio = ratio
-                best_match = key
-        if highest_ratio >= threshold and best_match:
-            additions[best_match] = candidate
-    return additions
-
-def save_additions():
-    try:
-        with open(ADDITIONS_FILE, "w", encoding="utf-8") as f:
-            json.dump(added_pairs, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"Ошибка сохранения дополнений: {e}")
-
-# --- Основные переменные ---
-@lru_cache(maxsize=10000)
-def decline_word_cached(word: str) -> str:
-    if not word or morph is None:
-        return word
-    try:
-        p = morph.parse(word)[0]
-        inf = p.inflect({"nomn"})
-        return inf.word if inf else p.word
-    except Exception:
-        return word
-
-# --- Веб-интерфейс (Streamlit) ---
-def run_streamlit_app() -> None:
+def run_streamlit_app():
     if st is None:
-        print("Streamlit не доступен.")
+        print("Streamlit не установлен.")
         return
-    st.set_page_config(page_title="Автообработка (ускорено)", layout="wide")
+
+    st.set_page_config(page_title="Автообработка", layout="wide")
     st.title("Распознавание брендов/моделей — ускорённый модуль")
     st.markdown("Загрузите CSV/XLSX, выберите столбец — скрипт автоматически подсветит и добавит переводы.")
 
-    sidebar = st.sidebar
-    threshold = sidebar.slider("Порог похожести для автодобавления", 0.6, 0.99, 0.85, 0.01)
-    translit_allowed = sidebar.checkbox("Автотранслитерация (латиница→кириллица)", value=True)
+    uploaded_dict_file = st.sidebar.file_uploader(
+        "Загрузить пользовательский словарь (XLSX или CSV)", type=["xlsx", "xls", "csv"]
+    )
+    user_dict = {}
+    if uploaded_dict_file:
+        try:
+            if uploaded_dict_file.name.lower().endswith(('.xls', '.xlsx')):
+                df_dict = pd.read_excel(uploaded_dict_file)
+            elif uploaded_dict_file.name.lower().endswith('.csv'):
+                df_dict = pd.read_csv(uploaded_dict_file)
+            else:
+                st.sidebar.error("Неподдерживаемый формат файла.")
+                df_dict = pd.DataFrame()
+            for _, row in df_dict.iterrows():
+                if len(row) >= 2:
+                    key = str(row[0]).strip()
+                    val = str(row[1]).strip()
+                    if key and val:
+                        user_dict[key] = val
+            if user_dict:
+                st.sidebar.success(f"Загружено {len(user_dict)} пар из пользовательского файла.")
+        except:
+            st.sidebar.error("Ошибка при чтении файла.")
 
-    new_k = sidebar.text_input("Ключ (англ)")
-    new_v = sidebar.text_input("Русское название")
-    if sidebar.button("Добавить в словарь"):
-        if new_k and new_v:
-            car_brands_models[new_k] = new_v
-            save_additions()
-            st.success(f"Добавлено: {new_k} → {new_v}")
-        else:
-            st.error("Поля обязательны")
+    current_dict = {**car_brands_models, **user_dict}
+    threshold = st.sidebar.slider("Порог похожести для автодобавления", 0.6, 0.99, 0.8, 0.01)
+    translit_allowed = st.sidebar.checkbox("Автотранслитерация", value=True)
 
     uploaded = st.file_uploader("Загрузите CSV/XLSX", type=["csv", "xls", "xlsx"])
     external_url = st.text_input("URL внешнего источника (CSV/XLSX) — необязательно")
     if not uploaded:
-        st.info("Загрузите файл выше, чтобы начать.")
+        st.info("Загрузите файл выше.")
         return
 
     try:
@@ -250,120 +268,173 @@ def run_streamlit_app() -> None:
         st.error(f"Не удалось прочитать файл: {e}")
         return
 
-    col = st.selectbox("Столбец для обработки", df.columns.tolist())
+    col_name = st.selectbox("Столбец для обработки", df.columns.tolist())
 
     if st.button("Обработать"):
-        external_df = load_external_data(external_url) if external_url else pd.DataFrame()
-        series = df[col]
-        dataset_words = extract_words_from_series(series)
-        external_words = extract_words_from_series(external_df.stack()) if not external_df.empty else set()
-        base_keys = set(car_brands_models.keys())
+        final_struct = build_final_struct(current_dict, {})
+        series = df[col_name]
+        dataset_words = set()
+        external_words = set()
+
+        for val in series.astype(str):
+            dataset_words.update(re.findall(r'\b\w+\b', val.lower()))
+        if external_url:
+            try:
+                ext_df = pd.read_csv(external_url)
+                for val in ext_df.stack().astype(str):
+                    external_words.update(re.findall(r'\b\w+\b', val.lower()))
+            except:
+                pass
+
+        base_keys = set(current_dict.keys())
         candidates = (dataset_words | external_words) - base_keys
 
-        # Обновление словаря кандидатами
         additions = prepare_additions_fast(base_keys, candidates, threshold=threshold)
         if additions:
-            car_brands_models.update(additions)
-            save_additions()
+            current_dict.update(additions)
+            try:
+                existing_additions = load_user_additions()
+                existing_additions.update(additions)
+                save_user_additions(existing_additions)
+            except:
+                pass
 
-        final_struct = build_final_struct(car_brands_models, additions)
-        # Обработка текста параллельно
-        texts = df[col].astype(str).tolist()
+        final_struct = build_final_struct(current_dict, additions)
+        texts = series.astype(str).tolist()
         processed_texts = process_texts_parallel(texts, final_struct, translit_allowed)
-        df[f"{col}_trans"] = processed_texts
 
-        # Визуализация подсветки
-        patt = final_struct.get("pattern")
-        mapping = final_struct.get("map", {})
-        def highlight_html(text: str) -> str:
-            if not text or not patt:
-                return text or ""
-            def rep(m):
-                f = m.group(0)
-                info = mapping.get(f.lower())
-                if info:
-                    return f"<mark style='background:#fffd8a'>{f} ({info[1]})</mark>"
-                return f
-            return patt.sub(rep, str(text))
-        rows = []
-        preview = df.head(200)
-        for idx in preview.index:
-            orig = preview.at[idx, col]
-            highlighted = highlight_html(orig)
-            rows.append(f"<tr><td style='padding:6px;border:1px solid #ddd'><code>{str(orig)}</code></td>"
-                        f"<td style='padding:6px;border:1px solid #ddd'>{highlighted}</td></tr>")
-        table_html = "<table style='width:100%;border-collapse:collapse'><thead><tr><th>Оригинал</th><th>Подсветка</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
-        st.markdown(table_html, unsafe_allow_html=True)
+        new_col_name = col_name + " (переведённый)"
+        df[new_col_name] = ""
+        for i, orig in enumerate(texts):
+            ru = processed_texts[i]
+            df.at[df.index[i], new_col_name] = f"{orig} ({ru})"
 
-        export = st.radio("Формат экспорта", ("CSV", "Excel"))
-        if export == "Excel":
-            buf = io.BytesIO()
+        export_format = st.radio("Экспортировать как", ("CSV", "Excel"))
+        buf = io.BytesIO()
+        if export_format == "Excel":
             df.to_excel(buf, index=False)
             buf.seek(0)
             st.download_button("Скачать Excel", buf, file_name="result.xlsx")
         else:
-            csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
-            st.download_button("Скачать CSV", csv_bytes, file_name="result.csv")
+            df.to_csv(buf, index=False)
+            buf.seek(0)
+            st.download_button("Скачать CSV", buf, file_name="result.csv", mime="text/csv")
 
 
-# --- CLI обработка ---
-def process_file_cli(input_path: str, column: str, external_url: Optional[str], output_path: Optional[str]) -> None:
+# --- CLI режим ---
+
+def extract_words_from_text(text: str) -> set:
+    return set(re.findall(r'\b\w+\b', text.lower()))
+
+def prepare_additions_fast(base_keys: set, candidates: set, threshold: float=0.8) -> dict:
+    additions = {}
+    for c in candidates:
+        for k in base_keys:
+            sim = similarity_ratio(c.lower(), k.lower())
+            if sim >= threshold:
+                additions[k] = c
+                break
+    return additions
+
+def process_file_cli(input_path: str, column: str, external_url: str, output_path: str):
     try:
         if input_path.lower().endswith(('.xls', '.xlsx')):
             df = pd.read_excel(input_path)
         else:
             df = pd.read_csv(input_path)
-    except Exception as e:
-        print("Ошибка чтения файла:", e)
+    except:
+        print("Ошибка чтения файла.")
         return
+
     if column not in df.columns:
-        print("Столбец не найден. Доступные:", df.columns.tolist())
+        print(f"Столбец '{column}' не найден.")
         return
-    external_df = load_external_data(external_url) if external_url else pd.DataFrame()
-    series = df[column]
-    dataset_words = extract_words_from_series(series)
-    external_words = extract_words_from_series(external_df.stack()) if not external_df.empty else set()
+
+    external_words = set()
+    if external_url:
+        try:
+            ext_df = pd.read_csv(external_url)
+            for val in ext_df.stack().astype(str):
+                external_words.update(re.findall(r'\b\w+\b', val.lower()))
+        except:
+            pass
+
+    dataset_words = set()
+    for val in df[column].astype(str):
+        dataset_words.update(re.findall(r'\b\w+\b', val.lower()))
+
     base_keys = set(car_brands_models.keys())
     candidates = (dataset_words | external_words) - base_keys
+
     additions = prepare_additions_fast(base_keys, candidates, threshold=0.85)
     if additions:
         car_brands_models.update(additions)
-        save_additions()
+
     final_struct = build_final_struct(car_brands_models, additions)
-    df[column] = df[column].fillna("").astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=True))
-    if not output_path:
-        output_path = "result.xlsx" if input_path.lower().endswith(('.xls', '.xlsx')) else "result.csv"
+
+    def process_text(text: str):
+        return process_text_fast_core(text, final_struct, translit_allowed=True)
+
+    df[column] = df[column].astype(str).apply(process_text)
+
     try:
         if output_path.lower().endswith(('.xls', '.xlsx')):
             df.to_excel(output_path, index=False)
         else:
             df.to_csv(output_path, index=False)
-        print("Результат сохранён в", output_path)
-    except Exception as e:
-        print("Ошибка сохранения:", e)
+        print(f"Результат сохранен в {output_path}")
+    except:
+        print("Ошибка сохранения файла.")
+
 
 # --- Основной запуск ---
+
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Обработка названий автомобилей")
+    parser.add_argument("--input", "-i", help="Путь к файлу входных данных")
+    parser.add_argument("--column", "-c", help="Название столбца для обработки")
+    parser.add_argument("--external", "-e", help="URL внешних данных")
+    parser.add_argument("--output", "-o", help="Путь для результата")
+    parser.add_argument("--list", action="store_true", help="Вывести список ключей словаря")
+    parser.add_argument("--dict", help="Путь к пользовательскому словарю (XLSX или CSV)")
+    args = parser.parse_args()
+
+    # Загрузка пользовательского словаря
+    if args.dict:
+        try:
+            if args.dict.lower().endswith(('.xls', '.xlsx')):
+                df_dict = pd.read_excel(args.dict)
+            elif args.dict.lower().endswith('.csv'):
+                df_dict = pd.read_csv(args.dict)
+            else:
+                print("Неподдерживаемый формат файла словаря.")
+                df_dict = pd.DataFrame()
+            for _, row in df_dict.iterrows():
+                if len(row) >= 2:
+                    key = str(row[0]).strip()
+                    val = str(row[1]).strip()
+                    if key and val:
+                        car_brands_models[key] = val
+        except:
+            pass
+
+    if args.list:
+        print("Всего ключей:", len(car_brands_models))
+        for k in sorted(car_brands_models):
+            print(k, "→", car_brands_models[k])
+        return
+
+    if not args.input or not args.column:
+        print("Укажите --input и --column или --list")
+        return
+
+    output_path = args.output or ("result.xlsx" if args.input.lower().endswith(('.xls', '.xlsx')) else "result.csv")
+    process_file_cli(args.input, args.column, args.external or "", output_path)
+
+# --- Запуск ---
+if __name__ == "__main__":
     if st:
         run_streamlit_app()
-        return
-    parser = argparse.ArgumentParser(description="Обработка названий автомобилей (ускорённая)")
-    parser.add_argument("--input", "-i", help="Входной файл CSV/XLSX")
-    parser.add_argument("--column", "-c", help="Имя столбца для обработки")
-    parser.add_argument("--external", "-e", help="URL внешнего CSV/XLSX")
-    parser.add_argument("--output", "-o", help="Путь для сохранения результата")
-    parser.add_argument("--list", action="store_true", help="Вывести список ключей словаря")
-    args = parser.parse_args()
-    if args.list:
-        print("Всего ключей в словаре:", len(car_brands_models))
-        for k in sorted(car_brands_models.keys()):
-            print(k, "->", car_brands_models[k])
-        return
-    if not args.input or not args.column:
-        print("Укажите --input и --column, или используйте --list для просмотра словаря.")
-        print("Пример: python script.py --input data.csv --column description --output result.csv")
-        return
-    process_file_cli(args.input, args.column, args.external, args.output)
-
-if __name__ == "__main__":
-    main()
+    else:
+        main()
