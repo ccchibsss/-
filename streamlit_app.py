@@ -355,11 +355,15 @@ def run_streamlit_app():
         texts = series.astype(str).tolist()
         processed_texts = process_texts_parallel(texts, final_struct, translit_allowed)
 
+        # Получаем позицию исходного столбца
+        col_idx = df.columns.get_loc(col_name)
+        # Вставляем новый столбец после исходного
         new_col_name = col_name + " (переведённый)"
-        df[new_col_name] = ""
+        df.insert(col_idx + 1, new_col_name, "")
+        # Заполняем новый столбец
         for i, orig in enumerate(texts):
             ru = processed_texts[i]
-            df.at[df.index[i], new_col_name] = f"{orig} ({ru})"
+            df.iat[i, col_idx + 1] = f"{orig} ({ru})"
 
         export_format = st.radio("Экспортировать как", ("CSV", "Excel"))
         buf = io.BytesIO()
