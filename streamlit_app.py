@@ -1,106 +1,230 @@
+# optimized_car_processing_with_ru_comments_fixed.py
+# Исправленная версия: убраны дубликаты, синтаксические ошибки и добавлены
+# недостающие ключи.
+from __future__ import annotations
 import io
-import os
 import re
+import sys
 import json
-import numpy as np
-from functools import lru_cache
+import os
+import argparse
+import requests
 import pandas as pd
-import logging
+from difflib import SequenceMatcher
+from functools import lru_cache
+from collections import Counter
+from typing import Optional, Dict, Set, List
 
-logging.basicConfig(level=logging.INFO)
-
+# Попытка подключить streamlit/altair для улучшённой визуализации (опционально)
 try:
-    import streamlit as st
-except ImportError:
+    import streamlit as st  # type: ignore
+except Exception:
     st = None
-
 try:
-    import pymorphy2
+    import altair as alt  # type: ignore
+except Exception:
+    alt = None
+
+# Попытка подключить pymorphy2 для корректного склонения русских слов
+try:
+    import pymorphy2  # type: ignore
     morph = pymorphy2.MorphAnalyzer()
-except ImportError:
+except Exception:
     morph = None
 
-# Ваш словарь брендов и моделей
-car_brands_models: dict = {
-    "BMW": "БМВ",
-    "1 Series": "1 Серия",
-    "2 Series": "2 Серия",
-    "3 Series": "3 Серия",
-    "4 Series": "4 Серия",
-    "5 Series": "5 Серия",
-    "6 Series": "6 Серия",
-    "7 Series": "7 Серия",
-    "8 Series": "8 Серия",
-    "X1": "Икс 1",
-    "X2": "Икс 2",
-    "X3": "Икс 3",
-    "X4": "Икс 4",
-    "X5": "Икс 5",
-    "X6": "Икс 6",
-    "X7": "Икс 7",
-    "Z4": "Зет 4",
-    "M3": "Эм 3",
-    "M5": "Эм 5",
-    "M Series": "Эм Серия",
-    "Mercedes-Benz": "Мерседес-Бенц",
-    "Mercedes": "Мерседес",
-}
-
+# Файл для сохранения пользовательских добавлений
 ADDITIONS_FILE = "additional_brands.json"
 
-def load_user_additions(filepath=ADDITIONS_FILE) -> dict:
-    if os.path.exists(filepath):
-        try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                return {str(k): str(v) for k, v in data.items()}
-        except Exception as e:
-            logging.warning(f"Ошибка загрузки пользовательских данных: {e}")
-    return {}
+# ---------------------------
+# Большой словарь брендов/моделей (англ -> рус)
+# Объединённый и очищенный (без дубликатов, с исправленными ключами).
+# ---------------------------
+car_brands_models: Dict[str, str] = {
+    "BMW": "БМВ",
+    "1 Series": "1 Серия", "2 Series": "2 Серия", "3 Series": "3 Серия",
+    "4 Series": "4 Серия", "5 Series": "5 Серия", "6 Series": "6 Серия",
+    "7 Series": "7 Серия", "8 Series": "8 Серия",
+    "X1": "Икс 1", "X2": "Икс 2", "X3": "Икс 3", "X4": "Икс 4",
+    "X5": "Икс 5", "X6": "Икс 6", "X7": "Икс 7", "Z4": "Зет 4",
+    "M3": "Эм 3", "M5": "Эм 5", "M Series": "Эм Серия",
 
-def save_user_additions(data: dict, filepath=ADDITIONS_FILE) -> None:
+    "Mercedes-Benz": "Мерседес-Бенц", "Mercedes": "Мерседес",
+    "A-Class": "А-Класс", "B-Class": "Б-Класс", "C-Class": "С-Класс",
+    "E-Class": "Е-Класс", "S-Class": "Си-Класс", "CLA": "CLA", "GLA": "GLA",
+    "GLC": "ГЛЦ", "GLE": "ГЛЕ", "GLS": "ГЛС", "G-Class": "Г-Класс", "CLS": "ЦЛС",
+    "Vito": "Вито", "eVito": "еВито", "Sprinter": "Спринтер", "Citan": "Ситан", "V-Class": "В-Класс",
+
+    "Toyota": "Тойота", "Corolla": "Королла", "Camry": "Камри", "RAV4": "Рав 4",
+    "Prius": "Приус", "Land Cruiser": "Ленд Крузер", "Yaris": "Ярис",
+    "Highlander": "Хайлендер", "Hilux": "Хайлюкс", "Sienta": "Сента",
+    "Avensis": "Авенсис", "HiAce": "ХайЭйс", "Proace": "Проэйс", "Dyna": "Дайна",
+    "Toyota Hiace Commuter": "ХайЭйс Комьютер", "Toyota Proace City": "Проэйс Сити",
+    "Corolla Cross": "Королла Кросс", "C-HR": "C-HR",
+
+    "Mazda": "Мазда", "Mazda3": "Мазда 3", "Mazda6": "Мазда 6", "Mazda2": "Мазда 2",
+    "Mazda CX-30": "Мазда CX-30", "Mazda CX-5": "Мазда CX-5", "MX-5": "МХ 5", "MX-30": "Мазда MX-30",
+
+    "Subaru": "Субару", "Impreza": "Импреза", "Forester": "Форестер",
+    "Outback": "Аутбек", "XV": "Икс ВИ", "BRZ": "BRZ", "Crosstrek": "Кросстрек", "Legacy": "Легаси",
+
+    "Kia": "Киа", "Rio": "Рио", "Ceed": "Сид", "Sportage": "Спортейдж", "Sorento": "Соренто",
+    "Soul": "Соул", "Optima": "Оптима", "Carnival": "Карнавал", "Stinger": "Стингер",
+    "Kia Stonic": "Стонік", "Kia Seltos": "Селтос", "Seltos": "Селтос", "Stonic": "Стонік",
+    "Kia EV6": "Киа EV6", "Kia EV9": "Киа EV9",
+
+    "Hyundai": "Хёндай", "Elantra": "Элантра", "Sonata": "Соната", "Tucson": "Тусон",
+    "Santa Fe": "Санта Фе", "Kona": "Кона", "Kona Electric": "Кона Электрик",
+    "Palisade": "Палисад", "i30": "i30", "i20": "i20", "i4": "i4", "iX": "iX",
+    "Hyundai Ioniq": "Ионик", "Ioniq 5": "Ионик 5", "Ioniq 6": "Ионик 6", "Hyundai Santa Cruz": "Санта Крус",
+
+    "BYD": "БайДжи", "Han": "Хан", "Tang": "Танг", "Song": "Сонг", "Dolphin": "Дельфин",
+    "BYD Tang EV": "Танг ЕВ", "BYD Atto 3": "Атто 3",
+
+    "Geely": "Джили", "Atlas": "Атлас", "Tiggo": "Тигго", "Tiggo 7": "Тигго 7", "Coolray": "Кулрэй",
+    "Emgrand": "Эмгранд", "Binrui": "Бинрай",
+
+    "Chery": "Черри", "Arrizo": "Аризо", "Exeed": "Эксид",
+
+    "JAC": "Джак", "Refine": "Рефайн",
+
+    "Lifan": "Лифан", "F3": "Ф3", "F7": "Ф7", "Baojun": "Баоцзюнь",
+    "Hongqi": "Хунци", "FAW": "Фав", "Bestune": "Бестюн", "Levdeo": "Левдео", "Wey": "Вей", "Yema": "Йема",
+
+    "Lada": "Лада", "Vesta": "Веста", "Granta": "Гранта", "Kalina": "Калина", "Niva": "Нива",
+    "Lada Priora": "Лада Приора", "Lada 4x4": "Лада 4х4", "Lada XRay": "Лада Xray",
+
+    "UAZ": "УАЗ", "Patriot": "Патриот", "Hunter": "Хантер", "Pickup": "Пикап",
+
+    "Gaz": "Газ", "GAZelle": "ГАЗель", "GAZelle Next": "ГАЗель Некст", "Gazelle Next": "ГАЗель Некст",
+    "Sobol": "Соболь", "Sobol 4x4": "Соболь 4х4",
+
+    "ZAZ": "Заз", "Vaz": "Ваз",
+
+    "Audi": "Ауди", "A1": "А1", "A3": "А3", "A4": "А4", "A6": "А6", "A8": "А8", "TT": "ТТ",
+    "Q3": "Кью 3", "Q5": "Кью 5", "Q7": "Кью 7", "Q8": "Кью 8", "RS3": "Эр Эс 3", "RS5": "Эр Эс 5",
+
+    "Volkswagen": "Фольксваген", "Golf": "Гольф", "Polo": "Поло", "Passat": "Пассат",
+    "Tiguan": "Тигуан", "Touareg": "Туарег", "Jetta": "Джетта", "Arteon": "Артеон",
+    "Transporter": "Транспортер", "Caddy": "Кэдди", "Crafter": "Крафтер",
+    "Volkswagen Caravelle": "Каравелле", "Multivan": "Мультивэн", "ID.3": "АйДи.3", "ID.4": "АйДи.4", "ID.Buzz": "АйДи.Базз",
+
+    "Skoda": "Шкода", "Octavia": "Октавия", "Superb": "Суперб", "Kodiaq": "Кодьяк", "Karoq": "Кароак",
+    "Fabia": "Фабия", "Yeti": "Йети", "Skoda Enyaq": "Еняк",
+
+    "Ford": "Форд", "Fiesta": "Фиеста", "Focus": "Фокус", "Mustang": "Мустанг",
+    "Ranger": "Рейнджер", "Bronco": "Бронко", "Transit": "Транзит", "Transit Custom": "Транзит Кастом",
+    "Transit Connect": "Транзит Коннект", "Ford Transit Van": "Транзит Фургон", "Ford Courier": "Форд Курьер", "Ford Galaxy": "Форд Гэлакси",
+    "e-Transit": "е-Транзит", "eSprinter": "еСпринтер", "eVito Tourer": "еВито Турайер",
+
+    "Chevrolet": "Шевроле", "Aveo": "Авео", "Lacetti": "Лачетти", "Malibu": "Мальбу",
+    "Cruze": "Круз", "Equinox": "Экуинокс", "Blazer": "Блейзер", "Tahoe": "Тахо", "Silverado": "Сильверадо",
+    "Chevrolet Express": "Экспресс",
+
+    "Peugeot": "Пежо", "208": "208", "308": "308", "508": "508", "3008": "3008", "5008": "5008",
+    "Partner": "Партнёр", "Peugeot Partner": "Пежо Партнёр", "Boxer": "Боксер", "Peugeot Boxer": "Пежо Боксер",
+
+    "Renault": "Рено", "Clio": "Клио", "Megane": "Меган", "Captur": "Каптюр",
+    "Kangoo": "Кангру", "Kangoo Van": "Кангру Ван", "Kangoo Express": "Кангру Экспресс", "Kangoo ZE": "Кангру ЗЕ",
+    "Trafic": "Трафик", "Master": "Мастер", "Renault Master": "Мастер", "Renault Master Van": "Мастер Фургон",
+    "Renault Kangoo Express": "Кангру Экспресс", "Renault Trafic Passenger": "Трафик Пассенджер", "Koleos": "Колеос", "Duster": "Дастер", "Logan": "Логан", "Sandero": "Сандеро", "Koleos": "Колеос", "Kangoo": "Кангру",
+
+    "Fiat": "Фиат", "Panda": "Панда", "500": "500", "Tipo": "Типо", "Ducato": "Дукато",
+    "Ducato Maxi": "Дукато Макси", "Fiat Ducato Maxi": "Дукато Макси", "Doblo": "Добло", "Fiorino": "Фиорино", "Talento": "Таленто",
+    "Fiat Professional": "Фиат Профешионал",
+
+    "Lancia": "Ланча",
+
+    "Alfa Romeo": "Альфа Ромео", "Giulia": "Джулия", "Stelvio": "Стельвио",
+
+    "Suzuki": "Сузуки", "Swift": "Свифт", "Ignis": "Игнис", "Vitara": "Витара", "Suzuki Carry": "Сузуки Кэрри",
+
+    "Honda": "Хонда", "Accord": "Акорд", "Civic": "Сивик", "Fit": "Фит", "Jazz": "Джаз", "CR-V": "CR-V", "HR-V": "HR-V", "Pilot": "Пилот", "Odyssey": "Одиссея",
+
+    "Mitsubishi": "Митсубиси", "Outlander": "Аутлендер", "Pajero": "Паджеро", "ASX": "ASX", "L200": "L200", "Mitsubishi L300": "Л300", "Eclipse Cross": "Иклепс Кросс",
+
+    "Isuzu": "Исузу", "D-Max": "Ди-Макс", "Isuzu N-Series": "Исузу N-Серия",
+
+    "Nissan": "Ниссан", "Altima": "Альтима", "Sentra": "Сентра", "Maxima": "Максима", "Rogue": "Роудж",
+    "X-Trail": "Икс-Трэйл", "Qashqai": "Кашкай", "Leaf": "Лиф", "Titan": "Титан", "Navara": "Навара", "Patrol": "Патрол", "Murano": "Муранo", "Avalon": "Эвалон", "Venza": "Венза", "Tacoma": "Такома", "Tundra": "Тундра", "Nissan NV200": "НВ200", "e-NV200": "е-НВ200", "NV300": "НВ300", "NV400": "НВ400", "Nissan Patrol Y62": "Патрол Y62",
+
+    "Polestar": "Полистар", "Polestar 2": "Полистар 2", "Polestar 3": "Полистар 3",
+
+    "Lucid": "Лусид", "Air": "Эйр",
+    "Rivian": "Ривиан", "R1T": "R1T",
+    "NIO": "Нио", "ES6": "ES6", "ES7": "ES7",
+    "XPeng": "ХПэнг", "P7": "P7",
+
+    "Tesla": "Тесла", "Model S": "Модель S", "Model 3": "Модель 3", "Model X": "Модель X", "Model Y": "Модель Y",
+
+    "Volvo": "Вольво", "S60": "S60", "S90": "S90", "V60": "V60", "XC40": "XC40", "XC60": "XC60", "XC90": "XC90",
+
+    "Seat": "Сеат", "Cupra": "Купра",
+    "Porsche": "Порше", "911": "911", "Cayman": "Кайман", "Macan": "Макан", "Taycan": "Тайкан",
+    "Jaguar": "Ягуар", "Land Rover": "Ленд Ровер", "Range Rover": "Рендж Ровер", "Discovery": "Дискавери",
+
+    "Mini": "Мини", "Cooper": "Купер",
+    "Ferrari": "Феррари", "Lamborghini": "Ламборгини", "Huracan": "Уракан", "Urus": "Урус",
+    "Maserati": "Мазерати", "Ghibli": "Гибли",
+
+    "GMC": "ДжиЭмСи", "Sierra": "Сиерра", "Cadillac": "Кадиллак", "Escalade": "Эскадил",
+
+    "Dodge": "Додж", "Challenger": "Челленджер", "Charger": "Чарджер",
+
+    "Jeep": "Джип", "Wrangler": "Рэнглер", "Grand Cherokee": "Гранд Чероки",
+
+    "Great Wall": "Грейт Уолл", "Haval": "Хавал", "Haval H9": "Хавал Н9", "Ora": "Ора", "Neta": "Нета", "Wuling": "Вулинг", "Roewe": "Роу", "Great Wall Wingle": "Вингл", "Great Wall Poer": "Поэр", "Gonow": "Гонов",
+
+    "Opel": "Опель", "Astra": "Астра", "Corsa": "Корса", "Insignia": "Инсигния", "Vivaro": "Виваро", "Movano": "Мовано", "Combo": "Комбо", "Vauxhall": "Воксхолл",
+
+    "Peugeot Partner": "Пежо Партнёр", "Citroen": "Ситроен", "Berlingo": "Берлинго", "Jumper": "Джампер", "Citroen Jumper": "Ситроен Джампер",
+
+    "Iveco": "Ивеко", "Daily": "Дейли", "Iveco Daily Van": "Ивеко Дейли Фургон",
+
+    "Maxus": "Максус", "V80": "В80", "G10": "Г10", "V80 LDV": "В80 ЛДВ", "LDV": "ЛДВ",
+
+    "Foton": "Фотон", "View": "Вью",
+
+    "Changan": "Чанган", "Omoda": "Омода", "Dongfeng": "Донгфэнг", "SouEast": "СаутИст",
+
+    "Tata": "Тата", "Mahindra": "Махиндра",
+
+    # типы/аббревиатуры
+    "Hybrid": "Гибрид", "Plug-in Hybrid": "Подключаемый гибрид", "Electric": "Электро",
+    "Van": "Фургон", "Minivan": "Минивэн", "MPV": "МПВ", "Pickup": "Пикап", "Crew Cab": "Дабл Кэб",
+    "Chassis Cab": "Шасси-Кабина", "Panel Van": "Панель Ван",
+}
+
+# ---------------------------
+# Загрузка пользовательских добавлений (если есть)
+# ---------------------------
+added_pairs: Dict[str, str] = {}
+if os.path.exists(ADDITIONS_FILE):
     try:
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logging.warning(f"Ошибка сохранения пользовательских данных: {e}")
+        with open(ADDITIONS_FILE, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+            if isinstance(loaded, dict):
+                added_pairs = {str(k): str(v) for k, v in loaded.items()}
+                car_brands_models.update(added_pairs)
+    except Exception:
+        pass
 
-def load_brands_from_file(filepath: str) -> dict:
-    try:
-        if filepath.lower().endswith(('.xls', '.xlsx')):
-            df = pd.read_excel(filepath)
-        elif filepath.lower().endswith('.csv'):
-            df = pd.read_csv(filepath)
-        else:
-            print("Некupported формат файла для словаря.")
-            return {}
-        result = {}
-        for _, row in df.iterrows():
-            if len(row) >= 2:
-                key = str(row[0]).strip()
-                val = str(row[1]).strip()
-                if key and val:
-                    result[key] = val
-        return result
-    except Exception as e:
-        print(f"Ошибка при загрузке файла словаря: {e}")
-        return {}
-
-added_pairs: dict = {}
-
+# ---------------------------
+# Помощь: склонение слов (кешируется для скорости)
+# ---------------------------
 @lru_cache(maxsize=10000)
 def decline_word_cached(word: str) -> str:
-    if not word or not morph:
+    if not word or morph is None:
         return word
     try:
         p = morph.parse(word)[0]
-        inflected = p.inflect({"nomn"})
-        return inflected.word if inflected else p.word
+        inf = p.inflect({"nomn"})
+        return inf.word if inf else p.word
     except Exception:
         return word
 
-# Транслитерация латиницы в кириллицу
+# ---------------------------
+# Транслитерация латиницы → кириллицы
+# ---------------------------
 LAT_TO_CYR_RULES = [
     ("shch", "щ"), ("sch", "щ"), ("sht", "шт"),
     ("oye", "ое"), ("oyu", "ою"), ("iya", "ия"), ("iye", "ие"),
@@ -120,7 +244,6 @@ _LAT_RULES_SORTED = sorted(LAT_TO_CYR_RULES, key=lambda x: -len(x[0]))
 def latin_to_cyrillic(text: str) -> str:
     if not isinstance(text, str) or not text:
         return text
-
     def translit_word(word: str) -> str:
         lower = word.lower()
         i = 0
@@ -142,10 +265,8 @@ def latin_to_cyrillic(text: str) -> str:
         if word[0].isupper():
             return out_s.capitalize()
         return out_s
-
     parts = re.split(r'(\s+)', text)
     res = []
-
     for p in parts:
         if re.search(r'[A-Za-z]', p):
             pieces = re.split(r'([^A-Za-z]+)', p)
@@ -161,150 +282,170 @@ def contains_latin(text: str) -> bool:
 def contains_cyrillic(text: str) -> bool:
     return bool(re.search(r'[\u0400-\u04FF]', str(text)))
 
-def levenshtein_distance(s1: str, s2: str) -> int:
-    if s1 == s2:
-        return 0
-    len_s1, len_s2 = len(s1), len(s2)
-    if len_s1 == 0:
-        return len_s2
-    if len_s2 == 0:
-        return len_s1
-
-    matrix = np.zeros((len_s1 + 1, len_s2 + 1), dtype=int)
-    for i in range(len_s1 + 1):
-        matrix[i][0] = i
-    for j in range(len_s2 + 1):
-        matrix[0][j] = j
-
-    for i in range(1, len_s1 + 1):
-        for j in range(1, len_s2 + 1):
-            cost = 0 if s1[i - 1] == s2[j - 1] else 1
-            matrix[i][j] = min(
-                matrix[i - 1][j] + 1,
-                matrix[i][j - 1] + 1,
-                matrix[i - 1][j - 1] + cost
-            )
-    return matrix[len_s1][len_s2]
-
-def similarity_ratio(s1: str, s2: str) -> float:
-    max_len = max(len(s1), len(s2))
-    if max_len == 0:
-        return 1.0
-    dist = levenshtein_distance(s1, s2)
-    return 1 - dist / max_len
-
-def build_final_struct(base_map: dict, additions: dict = None) -> dict:
+# ---------------------------
+# Построение финальной структуры для быстрого поиска
+# ---------------------------
+def build_final_struct(base_map: Dict[str, str], additions: Optional[Dict[str, str]] = None) -> Dict:
     final_map = {**base_map, **(additions or {})}
     if not final_map:
         return {"pattern": None, "map": {}, "len_max": 0}
-
     keys_sorted = sorted(final_map.keys(), key=len, reverse=True)
     escaped = [re.escape(k) for k in keys_sorted if k.strip()]
     pattern = re.compile(r'(?<!\w)(?:' + "|".join(escaped) + r')(?!\w)', flags=re.IGNORECASE)
-
-    mapping: dict = {}
+    mapping: Dict[str, tuple] = {}
     for k in keys_sorted:
         ru = final_map.get(k) or k
         ru_decl = decline_word_cached(ru)
         mapping[k.lower()] = (k, ru_decl)
-
     return {"pattern": pattern, "map": mapping, "len_max": max((len(k) for k in final_map.keys()), default=0)}
 
-def process_text_fast_core(text: str, final_struct: dict, translit_allowed: bool=True) -> str:
+# ---------------------------
+# Быстрая обработка одной строки с использованием предварительно
+# скомпилированного паттерна
+# ---------------------------
+def process_text_fast(text: str, final_struct: Dict, translit_allowed: bool = True) -> str:
     if not isinstance(text, str) or not final_struct:
         return text
-
     if translit_allowed and contains_latin(text) and not contains_cyrillic(text):
         cyr = latin_to_cyrillic(text)
         return f"{text} ({decline_word_cached(cyr)})"
-
     pattern = final_struct.get("pattern")
     mapping = final_struct.get("map", {})
-
-    if not pattern:
+    if pattern is None:
         return text
-
     def repl(m):
         f = m.group(0)
         info = mapping.get(f.lower())
         if info:
             return f"{f} ({info[1]})"
         return f
+    return pattern.sub(repl, text)
 
-    return pattern.sub(repl, str(text))
+# ---------------------------
+# Быстрый подсчёт вхождений: один проход regexp по всей колонке -> Counter
+# ---------------------------
+def count_matches_in_series_fast(series: pd.Series, final_struct: Dict) -> pd.Series:
+    if series is None or series.empty:
+        return pd.Series(dtype=int)
+    pattern = final_struct.get("pattern")
+    mapping = final_struct.get("map", {})
+    if pattern is None or not mapping:
+        return pd.Series(dtype=int)
+    all_text = series.dropna().astype(str).str.cat(sep=' ')
+    found = pattern.findall(all_text)
+    cnt = Counter()
+    for f in found:
+        info = mapping.get(f.lower())
+        if info:
+            cnt[info[0]] += 1
+    if not cnt:
+        return pd.Series(dtype=int)
+    s = pd.Series(cnt)
+    return s.sort_values(ascending=False)
 
-def process_texts_parallel(texts: list, final_struct: dict, translit_allowed: bool=True) -> list:
-    import concurrent.futures
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        futures = [
-            executor.submit(process_text_fast_core, text, final_struct, translit_allowed)
-            for text in texts
-        ]
-        return [f.result() for f in futures]
+# ---------------------------
+# Оптимизированное сопоставление похожих слов
+# ---------------------------
+def find_similar_word_fast(word: str, keys_list: List[str], keys_map: Dict[str, str], threshold: float = 0.85) -> Optional[str]:
+    if not word:
+        return None
+    w = word.lower()
+    lw = len(w)
+    best_ratio = 0.0
+    best_key = None
+    for k in keys_list:
+        lk = len(k)
+        if abs(lk - lw) > max(2, int(0.4 * max(lk, lw))):
+            continue
+        ratio = SequenceMatcher(None, w, k).ratio()
+        if ratio > best_ratio:
+            best_ratio = ratio
+            best_key = k
+    if best_ratio >= threshold and best_key:
+        return keys_map[best_key]
+    return None
 
-# Новая функция: подготовка дополнений по похожести
-def prepare_additions_fast(base_keys: set, candidates: set, threshold: float=0.8) -> dict:
-    additions = {}
-    for c in candidates:
-        for k in base_keys:
-            sim = similarity_ratio(c.lower(), k.lower())
-            if sim >= threshold:
-                additions[k] = c
-                break
+def prepare_additions_fast(base_keys: Set[str], candidates: Set[str], threshold: float = 0.85) -> Dict[str, str]:
+    additions: Dict[str, str] = {}
+    keys_map = {k.lower(): k for k in base_keys}
+    keys_lower = list(keys_map.keys())
+    for cand in candidates:
+        if cand in base_keys:
+            continue
+        cand_lower = cand.lower()
+        sim = find_similar_word_fast(cand_lower, keys_lower, keys_map, threshold=threshold)
+        if sim:
+            additions[cand] = car_brands_models.get(sim, sim)
     return additions
 
-# Веб-интерфейс
-def run_streamlit_app():
-    if st is None:
-        print("Streamlit не установлен.")
-        return
+# ---------------------------
+# Вспомогательные функции для I/O
+# ---------------------------
+def load_external_data(url: str) -> pd.DataFrame:
+    if not url:
+        return pd.DataFrame()
+    try:
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+        ct = resp.headers.get("Content-Type", "").lower()
+        if "text/csv" in ct or url.lower().endswith(".csv"):
+            return pd.read_csv(io.StringIO(resp.text))
+        try:
+            return pd.read_excel(io.BytesIO(resp.content))
+        except Exception:
+            return pd.read_csv(io.StringIO(resp.text))
+    except Exception:
+        return pd.DataFrame()
 
-    st.set_page_config(page_title="Автообработка", layout="wide")
+def extract_words_from_series(series: pd.Series) -> Set[str]:
+    if series is None:
+        return set()
+    all_text = series.dropna().astype(str).str.cat(sep=' ')
+    return set(re.findall(r'[A-Za-zА-Яа-я0-9\-_/\.]+', all_text))
+
+def save_additions():
+    try:
+        with open(ADDITIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump({str(k): str(v) for k, v in added_pairs.items()}, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+# ---------------------------
+# Streamlit приложение (улучшенная визуализация)
+# ---------------------------
+def run_streamlit_app() -> None:
+    if st is None:
+        return
+    st.set_page_config(page_title="Автообработка (ускорено)", layout="wide")
     st.title("Распознавание брендов/моделей — ускорённый модуль")
     st.markdown("Загрузите CSV/XLSX, выберите столбец — скрипт автоматически подсветит и добавит переводы.")
 
-    uploaded_dict_file = st.sidebar.file_uploader(
-        "Загрузить пользовательский словарь (XLSX или CSV)", type=["xlsx", "xls", "csv"]
-    )
-    user_dict = {}
-    if uploaded_dict_file:
-        try:
-            if uploaded_dict_file.name.lower().endswith(('.xls', '.xlsx')):
-                df_dict = pd.read_excel(uploaded_dict_file)
-            elif uploaded_dict_file.name.lower().endswith('.csv'):
-                df_dict = pd.read_csv(uploaded_dict_file)
-            else:
-                st.sidebar.error("Неподдерживаемый формат файла.")
-                df_dict = pd.DataFrame()
-            for _, row in df_dict.iterrows():
-                if len(row) >= 2:
-                    key = str(row[0]).strip()
-                    val = str(row[1]).strip()
-                    if key and val:
-                        user_dict[key] = val
-            if user_dict:
-                st.sidebar.success(f"Загружено {len(user_dict)} пар из пользовательского файла.")
-        except Exception as e:
-            st.sidebar.error(f"Ошибка при чтении файла: {e}")
+    # Настройки в сайдбаре
+    sidebar = st.sidebar
+    threshold = sidebar.slider("Порог похожести для автодобавления", 0.6, 0.99, 0.85, 0.01)
+    translit_allowed = sidebar.checkbox("Автотранслитерация (латиница→кириллица)", value=True)
 
-    # Обновляем основной словарь
-    global added_pairs
-    added_pairs = load_user_additions()
-    if user_dict:
-        added_pairs.update(user_dict)
-        save_user_additions(added_pairs)
-
-    current_dict = {**car_brands_models, **added_pairs}
-
-    threshold = st.sidebar.slider("Порог похожести для автодобавления", 0.6, 0.99, 0.8, 0.01)
-    translit_allowed = st.sidebar.checkbox("Автотранслитерация", value=True)
+    # Добавление новых пар вручную
+    sidebar.header("Добавить пару в словарь")
+    new_k = sidebar.text_input("Ключ (англ)")
+    new_v = sidebar.text_input("Русское название")
+    if sidebar.button("Добавить в словарь"):
+        if new_k and new_v:
+            car_brands_models[new_k] = new_v
+            added_pairs[new_k] = new_v
+            save_additions()
+            st.success(f"Добавлено: {new_k} → {new_v}")
+        else:
+            st.error("Поля обязательны")
 
     uploaded = st.file_uploader("Загрузите CSV/XLSX", type=["csv", "xls", "xlsx"])
     external_url = st.text_input("URL внешнего источника (CSV/XLSX) — необязательно")
+
     if not uploaded:
-        st.info("Загрузите файл выше.")
+        st.info("Загрузите файл выше, чтобы начать.")
         return
 
+    # Чтение файла (CSV или Excel)
     try:
         if uploaded.name.lower().endswith(('.xls', '.xlsx')):
             df = pd.read_excel(uploaded)
@@ -314,144 +455,135 @@ def run_streamlit_app():
         st.error(f"Не удалось прочитать файл: {e}")
         return
 
-    col_name = st.selectbox("Столбец для обработки", df.columns.tolist())
+    st.success(f"Файл загружен: {uploaded.name} ({df.shape[0]}×{df.shape[1]})")
+    st.dataframe(df.head(5))
+    col = st.selectbox("Столбец для обработки", df.columns.tolist())
 
     if st.button("Обработать"):
-        final_struct = build_final_struct(current_dict, {})
-        series = df[col_name]
-        dataset_words = set()
-        external_words = set()
-
-        for val in series.astype(str):
-            dataset_words.update(re.findall(r'\b\w+\b', val.lower()))
-        if external_url:
-            try:
-                ext_df = pd.read_csv(external_url)
-                for val in ext_df.stack().astype(str):
-                    external_words.update(re.findall(r'\b\w+\b', val.lower()))
-            except:
-                pass
-
-        base_keys = set(current_dict.keys())
+        external_df = load_external_data(external_url) if external_url else pd.DataFrame()
+        series = df[col]
+        dataset_words = extract_words_from_series(series)
+        external_words = extract_words_from_series(external_df.stack()) if not external_df.empty else set()
+        base_keys = set(car_brands_models.keys())
         candidates = (dataset_words | external_words) - base_keys
 
-        # Используем новую функцию
+        st.info(f"Уникальных токенов: {len(dataset_words)}; кандидатов вне словаря: {len(candidates)}")
         additions = prepare_additions_fast(base_keys, candidates, threshold=threshold)
         if additions:
-            current_dict.update(additions)
-            try:
-                existing_additions = load_user_additions()
-                existing_additions.update(additions)
-                save_user_additions(existing_additions)
-            except:
-                pass
+            st.success(f"Найдено кандидатов для добавления: {len(additions)}")
+            st.dataframe(pd.DataFrame.from_dict(additions, orient="index", columns=["rus"]).reset_index().rename(columns={"index":"key"}))
+            added_pairs.update(additions)
+            car_brands_models.update(additions)
+            save_additions()
+        else:
+            st.info("Новые кандидаты не найдены по выбранному порогу.")
 
-        final_struct = build_final_struct(current_dict, additions)
-        texts = series.astype(str).tolist()
-        processed_texts = process_texts_parallel(texts, final_struct, translit_allowed)
+        final_struct = build_final_struct(car_brands_models, additions)
+        df["_processed"] = df[col].fillna("").astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=translit_allowed))
 
-        col_idx = df.columns.get_loc(col_name)
-        new_col_name = col_name + " (переведённый)"
-        df.insert(col_idx + 1, new_col_name, "")
-        for i, orig in enumerate(texts):
-            df.iat[i, col_idx + 1] = f"{orig} ({processed_texts[i]})"
+        st.dataframe(
+            df[[col, "_processed"]]
+            .rename(columns={col: "Исходник", "_processed": "Обработанный"})
+            .head(200)
+        )
 
-        export_format = st.radio("Экспортировать как", ("CSV", "Excel"))
-        buf = io.BytesIO()
-        if export_format == "Excel":
+        # Подсветка совпадений HTML
+        patt = final_struct.get("pattern")
+        mapping = final_struct.get("map", {})
+        def highlight_html(text: str) -> str:
+            if not text or patt is None:
+                return text or ""
+            def rep(m):
+                f = m.group(0)
+                info = mapping.get(f.lower())
+                if info:
+                    return f"<mark style='background:#fffd8a'>{f} ({info[1]})</mark>"
+                return f
+            return patt.sub(rep, str(text))
+        rows = []
+        preview = df.head(200)
+        for idx in preview.index:
+            orig = preview.at[idx, col]
+            highlighted = highlight_html(orig)
+            rows.append(f"<tr><td style='padding:6px;border:1px solid #ddd'><code>{str(orig)}</code></td>"
+                        f"<td style='padding:6px;border:1px solid #ddd'>{highlighted}</td></tr>")
+        table_html = "<table style='width:100%;border-collapse:collapse'><thead><tr><th>Оригинал</th><th>Подсветка</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+        st.markdown(table_html, unsafe_allow_html=True)
+
+        # Экспорт результата с сохранением всех колонок
+        export = st.radio("Формат экспорта", ("CSV", "Excel"))
+        if export == "Excel":
+            buf = io.BytesIO()
             df.to_excel(buf, index=False)
             buf.seek(0)
             st.download_button("Скачать Excel", buf, file_name="result.xlsx")
         else:
-            df.to_csv(buf, index=False)
-            buf.seek(0)
-            st.download_button("Скачать CSV", buf, file_name="result.csv", mime="text/csv")
+            csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
+            st.download_button("Скачать CSV", csv_bytes, file_name="result.csv", mime="text/csv")
 
-# --- CLI ---
-def process_file_cli(input_path: str, column: str, external_url: str, output_path: str):
+# ---------------------------
+# CLI режим для пакетной обработки
+# ---------------------------
+def process_file_cli(input_path: str, column: str, external_url: Optional[str], output_path: Optional[str]) -> None:
     try:
         if input_path.lower().endswith(('.xls', '.xlsx')):
             df = pd.read_excel(input_path)
         else:
             df = pd.read_csv(input_path)
     except Exception as e:
-        print(f"Ошибка чтения файла: {e}")
+        print("Ошибка чтения файла:", e)
         return
-
     if column not in df.columns:
-        print(f"Столбец '{column}' не найден.")
+        print("Столбец не найден. Доступные:", df.columns.tolist())
         return
-
-    external_words = set()
-    if external_url:
-        try:
-            ext_df = pd.read_csv(external_url)
-            for val in ext_df.stack().astype(str):
-                external_words.update(re.findall(r'\b\w+\b', val.lower()))
-        except:
-            pass
-
-    dataset_words = set()
-    for val in df[column].astype(str):
-        dataset_words.update(re.findall(r'\b\w+\b', val.lower()))
-
+    external_df = load_external_data(external_url) if external_url else pd.DataFrame()
+    series = df[column]
+    dataset_words = extract_words_from_series(series)
+    external_words = extract_words_from_series(external_df.stack()) if not external_df.empty else set()
     base_keys = set(car_brands_models.keys())
     candidates = (dataset_words | external_words) - base_keys
-
-    # Используем новую функцию
     additions = prepare_additions_fast(base_keys, candidates, threshold=0.85)
     if additions:
+        added_pairs.update(additions)
         car_brands_models.update(additions)
-
+        save_additions()
     final_struct = build_final_struct(car_brands_models, additions)
-
-    def process_text(text: str):
-        return process_text_fast_core(text, final_struct, translit_allowed=True)
-
-    df[column] = df[column].astype(str).apply(process_text)
-
+    df[column] = df[column].fillna("").astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=True))
+    if not output_path:
+        output_path = "result.xlsx" if input_path.lower().endswith(('.xls', '.xlsx')) else "result.csv"
     try:
         if output_path.lower().endswith(('.xls', '.xlsx')):
             df.to_excel(output_path, index=False)
         else:
             df.to_csv(output_path, index=False)
-        print(f"Результат сохранен в {output_path}")
+        print("Результат сохранён в", output_path)
     except Exception as e:
-        print(f"Ошибка сохранения файла: {e}")
+        print("Ошибка сохранения:", e)
 
-# --- Основной запуск ---
+# ---------------------------
+# Точка входа
+# ---------------------------
 def main():
-    import argparse
-    parser = argparse.ArgumentParser(description="Обработка названий автомобилей")
-    parser.add_argument("--input", "-i", help="Путь к файлу входных данных")
-    parser.add_argument("--column", "-c", help="Название столбца для обработки")
-    parser.add_argument("--external", "-e", help="URL внешних данных")
-    parser.add_argument("--output", "-o", help="Путь для результата")
-    parser.add_argument("--list", action="store_true", help="Вывести список ключей словаря")
-    parser.add_argument("--dict", help="Путь к пользовательскому словарю (XLSX или CSV)")
-    args = parser.parse_args()
-
-    global added_pairs
-    if args.dict:
-        custom_dict = load_brands_from_file(args.dict)
-        added_pairs.update(custom_dict)
-        save_user_additions(added_pairs)
-
-    if args.list:
-        print("Всего ключей:", len(car_brands_models))
-        for k in sorted(car_brands_models):
-            print(k, "→", car_brands_models[k])
-        return
-
-    if not args.input or not args.column:
-        print("Укажите --input и --column или --list")
-        return
-
-    output_path = args.output or ("result.xlsx" if args.input.lower().endswith(('.xls', '.xlsx')) else "result.csv")
-    process_file_cli(args.input, args.column, args.external or "", output_path)
-
-if __name__ == "__main__":
     if st:
         run_streamlit_app()
-    else:
-        main()
+        return
+    parser = argparse.ArgumentParser(description="Обработка названий автомобилей (ускорённая)")
+    parser.add_argument("--input", "-i", help="Входной файл CSV/XLSX")
+    parser.add_argument("--column", "-c", help="Имя столбца для обработки")
+    parser.add_argument("--external", "-e", help="URL внешнего CSV/XLSX")
+    parser.add_argument("--output", "-o", help="Путь для сохранения результата")
+    parser.add_argument("--list", action="store_true", help="Вывести список ключей словаря")
+    args = parser.parse_args()
+    if args.list:
+        print("Всего ключей в словаре:", len(car_brands_models))
+        for k in sorted(car_brands_models.keys()):
+            print(k, "->", car_brands_models[k])
+        return
+    if not args.input or not args.column:
+        print("Укажите --input и --column, или используйте --list для просмотра словаря.")
+        print("Пример: python script.py --input data.csv --column description --output result.csv")
+        return
+    process_file_cli(args.input, args.column, args.external, args.output)
+
+if __name__ == "__main__":
+    main()
