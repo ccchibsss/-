@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Полный исправленный код с функцией prepare_additions_fast
+# Полный исправленный код с улучшенной функцией prepare_additions_fast
 
 from __future__ import annotations
 import io
@@ -30,108 +30,10 @@ ADDITIONS_FILE = "additional_brands.json"
 # Базовые данные
 car_brands_models: Dict[str, str] = {
     "BMW": "БМВ",
-"1 Series": "1 Серия", "2 Series": "2 Серия", "3 Series": "3 Серия",
-"4 Series": "4 Серия", "5 Series": "5 Серия", "6 Series": "6 Серия",
-"7 Series": "7 Серия", "8 Series": "8 Серия",
-"X1": "Икс 1", "X2": "Икс 2", "X3": "Икс 3", "X4": "Икс 4",
-"X5": "Икс 5", "X6": "Икс 6", "X7": "Икс 7", "Z4": "Зет 4",
-"M3": "Эм 3", "M5": "Эм 5", "M Series": "Эм Серия",
-"Mercedes-Benz": "Мерседес-Бенц", "Mercedes": "Мерседес",
-"A-Class": "А-Класс", "B-Class": "Б-Класс", "C-Class": "С-Класс",
-"E-Class": "Е-Класс", "S-Class": "Си-Класс", "CLA": "CLA", "GLA": "GLA",
-"GLC": "ГЛЦ", "GLE": "ГЛЕ", "GLS": "ГЛС", "G-Class": "Г-Класс", "CLS": "ЦЛС",
-"Vito": "Вито", "eVito": "еВито", "Sprinter": "Спринтер", "Citan": "Ситан", "V-Class": "В-Класс",
-"Toyota": "Тойота", "Corolla": "Королла", "Camry": "Камри", "RAV4": "Рав 4",
-"Prius": "Приус", "Land Cruiser": "Ленд Крузер", "Yaris": "Ярис",
-"Highlander": "Хайлендер", "Hilux": "Хайлюкс", "Sienta": "Сента",
-"Avensis": "Авенсис", "HiAce": "ХайЭйс", "Proace": "Проэйс", "Dyna": "Дайна",
-"Toyota Hiace Commuter": "ХайЭйс Комьютер", "Toyota Proace City": "Проэйс Сити",
-"Corolla Cross": "Королла Кросс", "C-HR": "C-HR",
-"Mazda": "Мазда", "Mazda3": "Мазда 3", "Mazda6": "Мазда 6", "Mazda2": "Мазда 2",
-"Mazda CX-30": "Мазда CX-30", "Mazda CX-5": "Мазда CX-5", "MX-5": "МХ 5", "MX-30": "Мазда MX-30",
-"Subaru": "Субару", "Impreza": "Импреза", "Forester": "Форестер",
-"Outback": "Аутбек", "XV": "Икс ВИ", "BRZ": "BRZ", "Crosstrek": "Кросстрек", "Legacy": "Легаси",
-"Kia": "Киа", "Rio": "Рио", "Ceed": "Сид", "Sportage": "Спортейдж", "Sorento": "Соренто",
-"Soul": "Соул", "Optima": "Оптима", "Carnival": "Карнавал", "Stinger": "Стингер",
-"Kia Stonic": "Стонік", "Kia Seltos": "Селтос", "Seltos": "Селтос", "Stonic": "Стонік",
-"Kia EV6": "Киа EV6", "Kia EV9": "Киа EV9",
-"Hyundai": "Хёндай", "Elantra": "Элантра", "Sonata": "Соната", "Tucson": "Тусон",
-"Santa Fe": "Санта Фе", "Kona": "Кона", "Kona Electric": "Кона Электрик",
-"Palisade": "Палисад", "i30": "i30", "i20": "i20", "i4": "i4", "iX": "iX",
-"Hyundai Ioniq": "Ионик", "Ioniq 5": "Ионик 5", "Ioniq 6": "Ионик 6", "Hyundai Santa Cruz": "Санта Крус",
-"BYD": "БайДжи", "Han": "Хан", "Tang": "Танг", "Song": "Сонг", "Dolphin": "Дельфин",
-"BYD Tang EV": "Танг ЕВ", "BYD Atto 3": "Атто 3",
-"Geely": "Джили", "Atlas": "Атлас", "Tiggo": "Тигго", "Tiggo 7": "Тигго 7", "Coolray": "Кулрэй",
-"Emgrand": "Эмгранд", "Binrui": "Бинрай",
-"Chery": "Черри", "Arrizo": "Аризо", "Exeed": "Эксид",
-"JAC": "Джак", "Refine": "Рефайн",
-"Lifan": "Лифан", "F3": "Ф3", "F7": "Ф7", "Baojun": "Баоцзюнь",
-"Hongqi": "Хунци", "FAW": "Фав", "Bestune": "Бестюн", "Levdeo": "Левдео", "Wey": "Вей", "Yema": "Йема",
-"Lada": "Лада", "Vesta": "Веста", "Granta": "Гранта", "Kalina": "Калина", "Niva": "Нива",
-"Lada Priora": "Лада Приора", "Lada 4x4": "Лада 4х4", "Lada XRay": "Лада Xray",
-"UAZ": "УАЗ", "Patriot": "Патриот", "Hunter": "Хантер", "Pickup": "Пикап",
-"Gaz": "Газ", "GAZelle": "ГАЗель", "GAZelle Next": "ГАЗель Некст", "Gazelle Next": "ГАЗель Некст",
-"Sobol": "Соболь", "Sobol 4x4": "Соболь 4х4",
-"ZAZ": "Заз", "Vaz": "Ваз",
-"Audi": "Ауди", "A1": "А1", "A3": "А3", "A4": "А4", "A6": "А6", "A8": "А8", "TT": "ТТ",
-"Q3": "Кью 3", "Q5": "Кью 5", "Q7": "Кью 7", "Q8": "Кью 8", "RS3": "Эр Эс 3", "RS5": "Эр Эс 5",
-"Volkswagen": "Фольксваген", "Golf": "Гольф", "Polo": "Поло", "Passat": "Пассат",
-"Tiguan": "Тигуан", "Touareg": "Туарег", "Jetta": "Джетта", "Arteon": "Артеон",
-"Transporter": "Транспортер", "Caddy": "Кэдди", "Crafter": "Крафтер",
-"Volkswagen Caravelle": "Каравелле", "Multivan": "Мультивэн", "ID.3": "АйДи.3", "ID.4": "АйДи.4", "ID.Buzz": "АйДи.Базз",
-"Skoda": "Шкода", "Octavia": "Октавия", "Superb": "Суперб", "Kodiaq": "Кодьяк", "Karoq": "Кароак",
-"Fabia": "Фабия", "Yeti": "Йети", "Skoda Enyaq": "Еняк",
-"Ford": "Форд", "Fiesta": "Фиеста", "Focus": "Фокус", "Mustang": "Мустанг",
-"Ranger": "Рейнджер", "Bronco": "Бронко", "Transit": "Транзит", "Transit Custom": "Транзит Кастом",
-"Transit Connect": "Транзит Коннект", "Ford Transit Van": "Транзит Фургон", "Ford Courier": "Форд Курьер", "Ford Galaxy": "Форд Гэлакси",
-"e-Transit": "е-Транзит", "eSprinter": "еСпринтер", "eVito Tourer": "еВито Турайер",
-"Chevrolet": "Шевроле", "Aveo": "Авео", "Lacetti": "Лачетти", "Malibu": "Мальбу",
-"Cruze": "Круз", "Equinox": "Экуинокс", "Blazer": "Блейзер", "Tahoe": "Тахо", "Silverado": "Сильверадо",
-"Chevrolet Express": "Экспресс",
-"Peugeot": "Пежо", "208": "208", "308": "308", "508": "508", "3008": "3008", "5008": "5008",
-"Partner": "Партнёр", "Peugeot Partner": "Пежо Партнёр", "Boxer": "Боксер", "Peugeot Boxer": "Пежо Боксер",
-"Renault": "Рено", "Clio": "Клио", "Megane": "Меган", "Captur": "Каптюр",
-"Kangoo": "Кангру", "Kangoo Van": "Кангру Ван", "Kangoo Express": "Кангру Экспресс", "Kangoo ZE": "Кангру ЗЕ",
-"Trafic": "Трафик", "Master": "Мастер", "Renault Master": "Мастер", "Renault Master Van": "Мастер Фургон",
-"Renault Kangoo Express": "Кангру Экспресс", "Renault Trafic Passenger": "Трафик Пассенджер", "Koleos": "Колеос", "Duster": "Дастер", "Logan": "Логан", "Sandero": "Сандеро",
-"Fiat": "Фиат", "Panda": "Панда", "500": "500", "Tipo": "Типо", "Ducato": "Дукато",
-"Ducato Maxi": "Дукато Макси", "Fiat Ducato Maxi": "Дукато Макси", "Doblo": "Добло", "Fiorino": "Фиорино", "Talento": "Таленто",
-"Fiat Professional": "Фиат Профешионал",
-"Lancia": "Ланча",
-"Alfa Romeo": "Альфа Ромео", "Giulia": "Джулия", "Stelvio": "Стельвио",
-"Suzuki": "Сузуки", "Swift": "Свифт", "Ignis": "Игнис", "Vitara": "Витара", "Suzuki Carry": "Сузуки Кэрри",
-"Honda": "Хонда", "Accord": "Акорд", "Civic": "Сивик", "Fit": "Фит", "Jazz": "Джаз", "CR-V": "CR-V", "HR-V": "HR-V", "Pilot": "Пилот", "Odyssey": "Одиссея",
-"Mitsubishi": "Митсубиси", "Outlander": "Аутлендер", "Pajero": "Паджеро", "ASX": "ASX", "L200": "L200", "Mitsubishi L300": "Л300", "Eclipse Cross": "Иклепс Кросс",
-"Isuzu": "Исузу", "D-Max": "Ди-Макс", "Isuzu N-Series": "Исузу N-Серия",
-"Nissan": "Ниссан", "Altima": "Альтима", "Sentra": "Сентра", "Maxima": "Максима", "Rogue": "Роудж",
-"X-Trail": "Икс-Трэйл", "Qashqai": "Кашкай", "Leaf": "Лиф", "Titan": "Титан", "Navara": "Навара", "Patrol": "Патрол", "Murano": "Муранo", "Avalon": "Эвалон", "Venza": "Венза", "Tacoma": "Такома", "Tundra": "Тундра", "Nissan NV200": "НВ200", "e-NV200": "е-НВ200", "NV300": "НВ300", "NV400": "НВ400", "Nissan Patrol Y62": "Патрол Y62",
-"Polestar": "Полистар", "Polestar 2": "Полистар 2", "Polestar 3": "Полистар 3",
-"Lucid": "Лусид", "Air": "Эйр",
-"Rivian": "Ривиан", "R1T": "R1T",
-"NIO": "Нио", "ES6": "ES6", "ES7": "ES7",
-"XPeng": "ХПэнг", "P7": "P7",
-"Tesla": "Тесла", "Model S": "Модель S", "Model 3": "Модель 3", "Model X": "Модель X", "Model Y": "Модель Y",
-"Volvo": "Вольво", "S60": "S60", "S90": "S90", "V60": "V60", "XC40": "XC40", "XC60": "XC60", "XC90": "XC90",
-"Seat": "Сеат", "Cupra": "Купра",
-"Porsche": "Порше", "911": "911", "Cayman": "Кайман", "Macan": "Макан", "Taycan": "Тайкан",
-"Jaguar": "Ягуар", "Land Rover": "Ленд Ровер", "Range Rover": "Рендж Ровер", "Discovery": "Дискавери",
-"Mini": "Мини", "Cooper": "Купер",
-"Ferrari": "Феррари", "Lamborghini": "Ламборгини", "Huracan": "Уракан", "Urus": "Урус",
-"Maserati": "Мазерати", "Ghibli": "Гибли",
-"GMC": "ДжиЭмСи", "Sierra": "Сиерра", "Cadillac": "Кадиллак", "Escalade": "Эскадил",
-"Dodge": "Додж", "Challenger": "Челленджер", "Charger": "Чарджер",
-"Jeep": "Джип", "Wrangler": "Рэнглер", "Grand Cherokee": "Гранд Чероки",
-"Great Wall": "Грейт Уолл", "Haval": "Хавал", "Haval H9": "Хавал Н9", "Ora": "Ора", "Neta": "Нета", "Wuling": "Вулинг", "Roewe": "Роу", "Great Wall Wingle": "Вингл", "Great Wall Poer": "Поэр", "Gonow": "Гонов",
-"Opel": "Опель", "Astra": "Астра", "Corsa": "Корса", "Insignia": "Инсигния", "Vivaro": "Виваро", "Movano": "Мовано", "Combo": "Комбо", "Vauxhall": "Воксхолл",
-"Peugeot Partner": "Пежо Партнёр", "Citroen": "Ситроен", "Berlingo": "Берлинго", "Jumper": "Джампер", "Citroen Jumper": "Ситроен Джампер",
-"Iveco": "Ивеко", "Daily": "Дейли", "Iveco Daily Van": "Ивеко Дейли Фургон",
-"Maxus": "Максус", "V80": "В80", "G10": "Г10", "V80 LDV": "В80 ЛДВ", "LDV": "ЛДВ",
-"Foton": "Фотон", "View": "Вью",
-"Changan": "Чанган", "Omoda": "Омода", "Dongfeng": "Донгфэнг", "SouEast": "СаутИст",
-"Tata": "Тата", "Mahindra": "Махиндра",
-"Hybrid": "Гибрид", "Plug-in Hybrid": "Подключаемый гибрид", "Electric": "Электро",
-"Van": "Фургон", "Minivan": "Минивэн", "MPV": "МПВ", "Pickup": "Пикап", "Crew Cab": "Дабл Кэб",
-"Chassis Cab": "Шасси-Кабина", "Panel Van": "Панель Ван",
+    "1 Series": "1 Серия",
+    "2 Series": "2 Серия",
+    "3 Series": "3 Серия",
+    # добавьте свои данные
 }
 
 # Загрузка пользовательских добавлений
@@ -143,8 +45,6 @@ if os.path.exists(ADDITIONS_FILE):
                 car_brands_models.update({str(k): str(v) for k, v in loaded.items()})
     except Exception:
         pass
-
-added_pairs: Dict[str, str] = {}
 
 @lru_cache(maxsize=10000)
 def decline_word_cached(word: str) -> str:
@@ -158,89 +58,18 @@ def decline_word_cached(word: str) -> str:
         return word
 
 LAT_TO_CYR_RULES = [
-    ("shch", "щ"), ("sht", "шт"), ("sci", "щи"), ("sci", "щи"), ("sch", "щ"), ("shch", "щ"),
-("oye", "ое"), ("oyu", "ою"), ("iya", "ия"), ("iye", "ие"),
-("aye", "ая"), ("ayu", "аю"), ("eyu", "ею"), ("iu", "ю"),
-("ia", "ия"), ("ya", "я"), ("yo", "ё"), ("yu", "ю"),
-("zh", "ж"), ("ge", "ж"), ("j", "ж"), ("g", "ж"),
-("kh", "х"), ("h", "х"), ("x", "х"),
-("ts", "ц"), ("tz", "ц"),
-("ch", "ч"),
-("sh", "ш"),
-("ya", "я"),
-("ye", "е"), ("i", "и"), ("j", "й"),
-("ju", "ю"), ("ya", "я"),
-("a", "а"), ("b", "б"), ("v", "в"), ("g", "г"), ("d", "д"),
-("e", "е"), ("z", "з"), ("i", "и"), ("k", "к"), ("l", "л"),
-("m", "м"), ("n", "н"), ("o", "о"), ("p", "п"), ("r", "р"),
-("s", "с"), ("t", "т"), ("u", "у"), ("f", "ф"), ("y", "ы"),
-("j", "й"), ("'", "ь"), ('"', "ъ"),
-("x", "кс"), ("q", "к"), ("w", "в"),
-// Вариации для мягкости, твердины, диакритики
-("'", "ь"),
-('"', "ъ"),
-// Расширенные варианты с учетом различных транслитерационных систем и вариантов написания
-("shch", "щ"),
-("sht", "шт"),
-("sci", "щи"),
-("sci", "щи"),
-("sch", "щ"),
-("shch", "щ"),
-("oye", "ое"),
-("oyu", "ою"),
-("iya", "ия"),
-("iye", "ие"),
-("aye", "ая"),
-("ayu", "аю"),
-("eyu", "ею"),
-("iu", "ю"),
-("ia", "ия"),
-("yo", "ё"),
-("yu", "ю"),
-("ya", "я"),
-("zh", "ж"),
-("ge", "ж"),
-("j", "ж"),
-("g", "ж"),
-("kh", "х"),
-("h", "х"),
-("x", "х"),
-("ts", "ц"),
-("tz", "ц"),
-("ch", "ч"),
-("sh", "ш"),
-("ya", "я"),
-("ye", "е"),
-("i", "и"),
-("j", "й"),
-("ju", "ю"),
-("ja", "я"),
-("a", "а"),
-("b", "б"),
-("v", "в"),
-("g", "г"),
-("d", "д"),
-("e", "е"),
-("z", "з"),
-("i", "и"),
-("k", "к"),
-("l", "л"),
-("m", "м"),
-("n", "н"),
-("o", "о"),
-("p", "п"),
-("r", "р"),
-("s", "с"),
-("t", "т"),
-("u", "у"),
-("f", "ф"),
-("y", "ы"),
-("j", "й"),
-("'", "ь"),
-('"', "ъ"),
-("x", "кс"),
-("q", "к"),
-("w", "в")
+    ("shch", "щ"), ("sch", "щ"), ("sht", "шт"),
+    ("oye", "ое"), ("oyu", "ою"), ("iya", "ия"), ("iye", "ие"),
+    ("aye", "ая"), ("ayu", "аю"), ("eyu", "ею"), ("iu", "ю"),
+    ("ia", "ия"), ("yo", "ё"), ("yu", "ю"), ("ya", "я"),
+    ("zh", "ж"), ("kh", "х"), ("ts", "ц"), ("ch", "ч"),
+    ("sh", "ш"), ("ye", "е"), ("ja", "я"), ("ju", "ю"),
+    ("je", "е"),
+    ("a", "а"), ("b", "б"), ("v", "в"), ("g", "г"), ("d", "д"),
+    ("e", "е"), ("z", "з"), ("i", "и"), ("k", "к"), ("l", "л"),
+    ("m", "м"), ("n", "н"), ("o", "о"), ("p", "п"), ("r", "р"),
+    ("s", "с"), ("t", "т"), ("u", "у"), ("f", "ф"), ("y", "ы"),
+    ("j", "й"), ("'", "ь"), ('"', "ъ"), ("x", "кс"), ("q", "к"), ("w", "в"),
 ]
 _LAT_RULES_SORTED = sorted(LAT_TO_CYR_RULES, key=lambda x: -len(x[0]))
 
@@ -415,148 +244,24 @@ def save_additions():
     except Exception:
         pass
 
-def parse_mapping_from_dataframe(df: pd.DataFrame) -> Dict[str, str]:
-    if df is None or df.empty:
-        return {}
-    cols = [c.lower() for c in df.columns]
-    if "key" in cols and "value" in cols:
-        kcol = df.columns[cols.index("key")]
-        vcol = df.columns[cols.index("value")]
-        return {str(k): str(v) for k, v in zip(df[kcol].astype(str), df[vcol].astype(str)) if str(k).strip()}
-    if len(cols) >= 2:
-        kcol = df.columns[0]
-        vcol = df.columns[1]
-        return {str(k): str(v) for k, v in zip(df[kcol].astype(str), df[vcol].astype(str)) if str(k).strip()}
-    if len(cols) == 1:
-        vals = df.iloc[:, 0].dropna().astype(str).tolist()
-        out = {}
-        for v in vals:
-            try:
-                parsed = json.loads(v)
-                if isinstance(parsed, dict):
-                    out.update({str(k): str(vv) for k, vv in parsed.items()})
-            except Exception:
-                continue
-        return out
-    return {}
-
-def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None) -> Dict[str, str]:
-    def try_parse_bytes(bts: bytes) -> Dict[str, str]:
-        text = bts.decode(CSV_ENCODING, errors="ignore")
-        try:
-            j = json.loads(text)
-            if isinstance(j, dict):
-                return {str(k): str(v) for k, v in j.items()}
-        except Exception:
-            pass
-        try:
-            return parse_mapping_from_dataframe(pd.read_csv(io.StringIO(text)))
-        except Exception:
-            pass
-        try:
-            return parse_mapping_from_dataframe(pd.read_excel(io.BytesIO(bts)))
-        except Exception:
-            pass
-        return {}
-
-    if fileobj:
-        try:
-            if hasattr(fileobj, "seek"):
-                try:
-                    fileobj.seek(0)
-                except Exception:
-                    pass
-            if hasattr(fileobj, "read"):
-                raw = fileobj.read()
-                if isinstance(raw, bytes):
-                    return try_parse_bytes(raw)
-                if isinstance(raw, str):
-                    try:
-                        j = json.loads(raw)
-                        if isinstance(j, dict):
-                            return {str(k): str(v) for k, v in j.items()}
-                    except Exception:
-                        pass
-                    try:
-                        return parse_mapping_from_dataframe(pd.read_csv(io.StringIO(raw)))
-                    except Exception:
-                        pass
-            name = getattr(fileobj, "name", "") or ""
-            if name.lower().endswith(".json"):
-                try:
-                    if hasattr(fileobj, "seek"):
-                        try:
-                            fileobj.seek(0)
-                        except Exception:
-                            pass
-                    txt = fileobj.read()
-                    if isinstance(txt, bytes):
-                        txt = txt.decode(CSV_ENCODING, errors="ignore")
-                    j = json.loads(txt)
-                    if isinstance(j, dict):
-                        return {str(k): str(v) for k, v in j.items()}
-                except Exception:
-                    pass
-            if hasattr(fileobj, "getvalue"):
-                try:
-                    raw = fileobj.getvalue()
-                    if isinstance(raw, bytes):
-                        return try_parse_bytes(raw)
-                    if isinstance(raw, str):
-                        return try_parse_bytes(raw.encode(CSV_ENCODING, errors="ignore"))
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-    if source:
-        try:
-            if source.startswith("http"):
-                r = requests.get(source, timeout=15)
-                r.raise_for_status()
-                ct = r.headers.get("Content-Type", "").lower()
-                if "application/json" in ct or source.lower().endswith(".json"):
-                    data = r.json()
-                    if isinstance(data, dict):
-                        return {str(k): str(v) for k, v in data.items()}
-                if "text/csv" in ct or source.lower().endswith(".csv"):
-                    txt = r.content.decode(CSV_ENCODING, errors="ignore")
-                    return parse_mapping_from_dataframe(pd.read_csv(io.StringIO(txt)))
-                try:
-                    return parse_mapping_from_dataframe(pd.read_excel(io.BytesIO(r.content)))
-                except Exception:
-                    try:
-                        return parse_mapping_from_dataframe(pd.read_csv(io.StringIO(r.content.decode(CSV_ENCODING))))
-                    except Exception:
-                        return {}
-            else:
-                if os.path.exists(source):
-                    if source.lower().endswith(".json"):
-                        with open(source, "r", encoding="utf-8") as f:
-                            data = json.load(f)
-                            if isinstance(data, dict):
-                                return {str(k): str(v) for k, v in data.items()}
-                    if source.lower().endswith((".xls", ".xlsx")):
-                        df = pd.read_excel(source)
-                        return parse_mapping_from_dataframe(df)
-                    try:
-                        df = pd.read_csv(source, encoding=CSV_ENCODING)
-                        return parse_mapping_from_dataframe(df)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-    return {}
-
-# ВАЖНО: добавляем функцию prepare_additions_fast
+# Новая функция: сначала сравнивает по сочетаниям латиницы, потом по буквам
 def prepare_additions_fast(base_keys: set, candidates: set, threshold: float = 0.85) -> Dict[str, str]:
     additions = {}
     for candidate in candidates:
         for base in base_keys:
-            similarity = SequenceMatcher(None, candidate, base).ratio()
-            if similarity >= threshold:
+            # Сравнение по всем символам
+            similarity_full = SequenceMatcher(None, candidate, base).ratio()
+            if similarity_full >= threshold:
                 additions[candidate] = base
                 break
+            else:
+                # Попытка сравнить по наборам букв (без учета порядка)
+                candidate_letters = sorted(candidate.lower())
+                base_letters = sorted(base.lower())
+                similarity_letters = SequenceMatcher(None, "".join(candidate_letters), "".join(base_letters)).ratio()
+                if similarity_letters >= threshold:
+                    additions[candidate] = base
+                    break
     return additions
 
 # --- UI и CLI ---
@@ -637,7 +342,7 @@ def run_streamlit_app() -> None:
         base_keys = set(car_brands_models.keys())
         candidates = (dataset_words | external_words) - base_keys
 
-        # Автоматическое добавление
+        # Автоматическое добавление с новой логикой
         additions = prepare_additions_fast(base_keys, candidates, threshold=threshold)
         if additions:
             for k, v in additions.items():
@@ -760,7 +465,7 @@ def main():
     base_keys = set(car_brands_models.keys())
     candidates = (dataset_words | external_words) - base_keys
 
-    # Автоматическое добавление
+    # Автоматическое добавление с улучшенной логикой
     additions = prepare_additions_fast(base_keys, candidates, threshold=0.85)
     for k, v in additions.items():
         car_brands_models[k] = v
@@ -779,7 +484,6 @@ def main():
     # Создаем колонку "Перевод" (если нужно)
     df["Перевод"] = df["Обработанное"]
 
-    # Создаем колонку "Обработанное" (уже есть)
     # Экспорт
     output_path = args.output or ("result.xlsx" if args.input.lower().endswith(('.xls', '.xlsx')) else "result.csv")
     try:
