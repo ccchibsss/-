@@ -36,6 +36,9 @@ car_brands_models: Dict[str, str] = {
     # добавьте свои данные
 }
 
+# Объявляем глобальную переменную для новых пар
+added_pairs: Dict[str, str] = {}
+
 # Загрузка пользовательских добавлений
 if os.path.exists(ADDITIONS_FILE):
     try:
@@ -288,7 +291,8 @@ def run_streamlit_app() -> None:
         elif dict_url:
             loaded = load_dictionary(source=dict_url)
         if loaded:
-            car_brands_models.update(loaded)
+            for k, v in loaded.items():
+                car_brands_models[k] = v
             added_pairs.update(loaded)
             save_additions()
             st.success(f"Загружено {len(loaded)} пар из словаря")
@@ -340,7 +344,7 @@ def run_streamlit_app() -> None:
         base_keys = set(car_brands_models.keys())
         candidates = (dataset_words | external_words) - base_keys
 
-        # Автоматическое добавление с улучшенной логикой
+        # Автоматическое добавление с новой логикой
         additions = prepare_additions_fast(base_keys, candidates, threshold=threshold)
         if additions:
             for k, v in additions.items():
