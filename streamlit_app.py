@@ -27,7 +27,7 @@ CSV_ENCODING = "utf-8-sig"
 ADDITIONS_FILE = "additional_brands.json"
 
 # Базовые данные (обновлены и без дублирования)
-car_brands_models: Dict[str, str] = {
+car_brands_models = {
     # BMW
     "BMW": "БМВ",
     "1 Series": "1 Серия",
