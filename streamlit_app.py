@@ -569,6 +569,12 @@ def run_streamlit_app() -> None:
             return process_text_fast(val, final_struct, translit_allowed=translit_allowed)
         df["Перевод"] = df[col].astype(str).apply(get_translation)
 
+        # ВАЖНО: создаем новую колонку "Обработанное" перед экспортом
+        df["Обработанное"] = df[col].astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=translit_allowed))
+
+        # Вывод таблицы (если нужно)
+        # st.dataframe(df)  # можно раскомментировать для отображения всей таблицы
+
         # Экспорт
         export_format = st.radio("Формат экспорта", ("CSV", "Excel"))
         if export_format == "Excel":
@@ -620,6 +626,8 @@ def process_file_cli(input_path: str, column: str, external_url: Optional[str], 
     df[column] = df[column].astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=True))
     # Создаем колонку "Перевод" — добавляем в конец
     df["Перевод"] = df[column].astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=True))
+    # Создаем колонку "Обработанное" перед сохранением
+    df["Обработанное"] = df[column].astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=True))
     # Сохраняем
     if not output_path:
         output_path = "result.xlsx" if input_path.lower().endswith(('.xls', '.xlsx')) else "result.csv"
