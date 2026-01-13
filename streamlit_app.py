@@ -1074,7 +1074,7 @@ def run_streamlit_app() -> None:
         return
     
     st.set_page_config(page_title="Автообработка", layout="wide")
-    st.title("Распознавание брендов/моделей — улучшенная визуализация")
+    st.title("Распознавание брендов/моделей")
     st.markdown("Загрузите CSV/XLSX, выберите столбец — скрипт автоматически подсветит совпадения.")
 
     sidebar = st.sidebar
