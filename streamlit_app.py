@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Полный скрипт с исправлением и улучшениями
+# Полный исправленный код
 
 from __future__ import annotations
 import io
@@ -27,7 +27,7 @@ except Exception:
 CSV_ENCODING = "utf-8-sig"
 ADDITIONS_FILE = "additional_brands.json"
 
-# Глобальные переменные
+# Базовые данные
 car_brands_models: Dict[str, str] = {
     "BMW": "БМВ",
 "1 Series": "1 Серия", "2 Series": "2 Серия", "3 Series": "3 Серия",
@@ -134,8 +134,6 @@ car_brands_models: Dict[str, str] = {
 "Chassis Cab": "Шасси-Кабина", "Panel Van": "Панель Ван",
 }
 
-added_pairs: Dict[str, str] = {}  # <-- добавлено для хранения новых пар
-
 # Загрузка пользовательских добавлений
 if os.path.exists(ADDITIONS_FILE):
     try:
@@ -143,9 +141,10 @@ if os.path.exists(ADDITIONS_FILE):
             loaded = json.load(f)
             if isinstance(loaded, dict):
                 car_brands_models.update({str(k): str(v) for k, v in loaded.items()})
-                added_pairs.update({str(k): str(v) for k, v in loaded.items()})
     except Exception:
         pass
+
+added_pairs: Dict[str, str] = {}
 
 @lru_cache(maxsize=10000)
 def decline_word_cached(word: str) -> str:
@@ -315,62 +314,6 @@ def process_text_fast(text: str, final_struct: Dict, translit_allowed: bool = Tr
             else:
                 return format_custom(text, final_struct)
 
-def count_matches_in_series_fast(series: pd.Series, final_struct: Dict) -> pd.Series:
-    if series is None or series.empty:
-        return pd.Series(dtype=int)
-    pattern = final_struct.get("pattern")
-    mapping = final_struct.get("map", {})
-    if pattern is None or not mapping:
-        return pd.Series(dtype=int)
-    all_text = series.dropna().astype(str).str.cat(sep=' ')
-    found = pattern.findall(all_text)
-    cnt = Counter()
-    for f in found:
-        info = mapping.get(f.lower())
-        if info:
-            cnt[info[0]] += 1
-    return pd.Series(cnt).sort_values(ascending=False)
-
-def find_similar_word_fast(word: str, keys_list: List[str], keys_map: Dict[str, str], threshold: float = 0.85) -> Optional[str]:
-    if not word:
-        return None
-    w = word.lower()
-    lw = len(w)
-    best_ratio = 0.0
-    best_key = None
-    for k in keys_list:
-        lk = len(k)
-        if abs(lk - lw) > max(2, int(0.4 * max(lk, lw))):
-            continue
-        ratio = SequenceMatcher(None, w, k).ratio()
-        if ratio > best_ratio:
-            best_ratio = ratio
-            best_key = k
-    if best_ratio >= threshold and best_key:
-        return keys_map[best_key]
-    return None
-
-def prepare_additions_fast(base_keys: Set[str], candidates: Set[str], threshold: float = 0.85) -> Dict[str, str]:
-    additions: Dict[str, str] = {}
-    keys_map = {k.lower(): k for k in base_keys}
-    keys_lower = list(keys_map.keys())
-    for cand in candidates:
-        if cand in base_keys:
-            continue
-        sim = find_similar_word_fast(cand, keys_lower, keys_map, threshold)
-        if sim:
-            key_lower = sim.lower()
-            matched_key = None
-            for k in base_keys:
-                if k.lower() == key_lower:
-                    matched_key = k
-                    break
-            if matched_key:
-                additions[cand] = car_brands_models.get(matched_key, matched_key)
-            else:
-                additions[cand] = car_brands_models.get(sim, sim)
-    return additions
-
 def load_external_data(url: str) -> pd.DataFrame:
     if not url:
         return pd.DataFrame()
@@ -465,8 +408,7 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
                     except Exception:
                         pass
                     try:
-                        df = pd.read_csv(io.StringIO(raw))
-                        return parse_mapping_from_dataframe(df)
+                        return parse_mapping_from_dataframe(pd.read_csv(io.StringIO(raw)))
                     except Exception:
                         pass
             name = getattr(fileobj, "name", "") or ""
@@ -536,13 +478,14 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
             pass
     return {}
 
-# ----------------- UI и CLI -----------------
+# --- UI и CLI ---
+
 def run_streamlit_app() -> None:
     if st is None:
         return
-    st.set_page_config(page_title="Автообработка (улучшенная)", layout="wide")
+    st.set_page_config(page_title="Автообработка", layout="wide")
     st.title("Распознавание брендов/моделей — улучшенная визуализация")
-    st.markdown("Загрузите CSV/XLSX, выберите столбец — скрипт автоматически подсветит совпадения с словарем.")
+    st.markdown("Загрузите CSV/XLSX, выберите столбец — скрипт автоматически подсветит совпадения.")
 
     sidebar = st.sidebar
     threshold = sidebar.slider("Порог для автодобавления", 0.6, 0.99, 0.85, 0.01)
@@ -581,7 +524,7 @@ def run_streamlit_app() -> None:
             st.error("Поля обязательны")
 
     uploaded = st.file_uploader("Выберите CSV/XLSX", type=["csv", "xls", "xlsx"])
-    external_url = st.text_input("URL внешнего источника (CSV/XLSX) — необязательно")
+    external_url = st.text_input("URL внешних данных (CSV/XLSX) — необязательно")
     if not uploaded:
         st.info("Загрузите файл выше.")
         return
@@ -621,17 +564,19 @@ def run_streamlit_app() -> None:
             added_pairs.update(additions)
             save_additions()
 
-        # Создаем структуру для поиска
         final_struct = build_final_struct(car_brands_models, additions)
         pattern = final_struct.get("pattern")
         mapping = final_struct.get("map", {})
 
-        # Создаем HTML таблицу с подсветкой и иконками
-        def create_highlighted_html(df: pd.DataFrame, col: str, pattern: re.Pattern, mapping: Dict) -> str:
+        # Создаем новые колонки: исходное и обработанное
+        df["Исходное"] = df[col]
+        df["Обработанное"] = df[col].astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=translit_allowed))
+
+        # Создаем HTML таблицу с подсветкой исходных данных
+        def create_html_table(df: pd.DataFrame, pattern: re.Pattern, mapping: Dict) -> str:
             html_rows = ""
             for idx in df.index[:200]:
-                original = df.at[idx, col]
-                # Генерируем подсветку
+                original = df.at[idx, "Исходное"]
                 def replacer(match):
                     f = match.group(0)
                     info = mapping.get(f.lower())
@@ -639,39 +584,32 @@ def run_streamlit_app() -> None:
                         return f"<mark style='background:#fffd8a'>{f} ({info[1]})</mark>"
                     return f
                 highlighted_value = pattern.sub(replacer, str(original))
-                # Проверка наличия подсветки
                 if "<mark" in highlighted_value:
-                    style = "background-color:#ffff99"  # светлый желтый
-                    icon = "🔍"  # иконка для совпадения
+                    style = "background-color:#ffff99"
+                    icon = "🔍"
                 else:
                     style = ""
-                    icon = "⚪"  # иконка для отсутствия
+                    icon = "⚪"
                 html_rows += (
                     f"<tr>"
                     f"<td style='padding:6px;border:1px solid #ddd; {style}' title='Исходное: {original}'><code>{original}</code></td>"
                     f"<td style='padding:6px;border:1px solid #ddd'>{icon} {highlighted_value}</td>"
                     f"</tr>"
                 )
-            table_html = (
+            html_table = (
                 "<table style='width:100%;border-collapse:collapse'>"
                 "<thead><tr><th>Исходное</th><th>Подсветка</th></tr></thead>"
                 "<tbody>" + html_rows + "</tbody></table>"
             )
-            return table_html
+            return html_table
 
-        html_table = create_highlighted_html(df, col, pattern, mapping)
+        html_table = create_html_table(df, pattern, mapping)
         st.markdown(html_table, unsafe_allow_html=True)
 
-        # Создаем колонку "Перевод" — добавляем в конец таблицы
-        def get_translation(val):
-            return process_text_fast(val, final_struct, translit_allowed=translit_allowed)
-        df["Перевод"] = df[col].astype(str).apply(get_translation)
-
-        # ВАЖНО: создаем новую колонку "Обработанное" перед экспортом
-        df["Обработанное"] = df[col].astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=translit_allowed))
-
-        # Вывод таблицы (если нужно)
-        # st.dataframe(df)  # можно раскомментировать для отображения всей таблицы
+        # Отображение таблицы с двумя колонками
+        with st.expander("Полная таблица с исходным и обработанным"):
+            display_df = df[["Исходное", "Обработанное"]]
+            st.dataframe(display_df)
 
         # Экспорт
         export_format = st.radio("Формат экспорта", ("CSV", "Excel"))
@@ -685,65 +623,12 @@ def run_streamlit_app() -> None:
             st.download_button("Скачать CSV", csv_bytes, file_name="result.csv", mime="text/csv")
 
 
-# ---------------- CLI ----------------
-def process_file_cli(input_path: str, column: str, external_url: Optional[str], output_path: Optional[str], dict_source: Optional[str]) -> None:
-    try:
-        if input_path.lower().endswith(('.xls', '.xlsx')):
-            df = pd.read_excel(input_path)
-        else:
-            df = pd.read_csv(input_path, encoding=CSV_ENCODING)
-    except Exception as e:
-        print("Ошибка чтения файла:", e)
-        return
-    if column not in df.columns:
-        print("Столбец не найден:", df.columns.tolist())
-        return
-    if dict_source:
-        loaded = load_dictionary(source=dict_source)
-        if loaded:
-            for k, v in loaded.items():
-                car_brands_models[k] = v
-            added_pairs.update(loaded)
-            save_additions()
-            print(f"Загружено пар: {len(loaded)}")
-    ext_df = load_external_data(external_url) if external_url else pd.DataFrame()
-
-    series = df[column]
-    dataset_words = extract_words_from_series(series)
-    external_words = extract_words_from_series(ext_df.stack()) if not ext_df.empty else set()
-    base_keys = set(car_brands_models.keys())
-    candidates = (dataset_words | external_words) - base_keys
-
-    additions = prepare_additions_fast(base_keys, candidates, threshold=0.85)
-    for k, v in additions.items():
-        car_brands_models[k] = v
-    added_pairs.update(additions)
-    save_additions()
-
-    final_struct = build_final_struct(car_brands_models, additions)
-    df[column] = df[column].astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=True))
-    # Создаем колонку "Перевод" — добавляем в конец
-    df["Перевод"] = df[column].astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=True))
-    # Создаем колонку "Обработанное" перед сохранением
-    df["Обработанное"] = df[column].astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=True))
-    # Сохраняем
-    if not output_path:
-        output_path = "result.xlsx" if input_path.lower().endswith(('.xls', '.xlsx')) else "result.csv"
-    try:
-        if output_path.lower().endswith(('.xls', '.xlsx')):
-            df.to_excel(output_path, index=False)
-        else:
-            df.to_csv(output_path, index=False, encoding=CSV_ENCODING)
-        print("Результат сохранен:", output_path)
-    except Exception as e:
-        print("Ошибка сохранения:", e)
-
 def main():
     if st:
         run_streamlit_app()
         return
     import argparse
-    parser = argparse.ArgumentParser(description="Автообработка с улучшенной визуализацией")
+    parser = argparse.ArgumentParser(description="Автообработка")
     parser.add_argument("--input", "-i", help="Входной файл CSV/XLSX")
     parser.add_argument("--column", "-c", help="Имя столбца")
     parser.add_argument("--external", "-e", help="URL внешних данных")
@@ -754,14 +639,77 @@ def main():
 
     if args.list:
         print("Всего ключей в словаре:", len(car_brands_models))
-        for k in sorted(car_brands_models.keys()):
+        for k in sorted(car_brands_models):
             print(k, "→", car_brands_models[k])
         return
     if not args.input or not args.column:
         print("Укажите --input и --column, или --list")
         return
 
-    process_file_cli(args.input, args.column, args.external, args.output, args.dict)
+    # Обработка файла из командной строки
+    try:
+        if args.input.lower().endswith(('.xls', '.xlsx')):
+            df = pd.read_excel(args.input)
+        else:
+            df = pd.read_csv(args.input, encoding=CSV_ENCODING)
+    except Exception as e:
+        print("Ошибка чтения файла:", e)
+        return
+
+    if args.column not in df.columns:
+        print("Столбец не найден:", args.column)
+        return
+
+    # Загрузка словаря
+    if args.dict:
+        loaded = load_dictionary(source=args.dict)
+        if loaded:
+            for k, v in loaded.items():
+                car_brands_models[k] = v
+            added_pairs.update(loaded)
+            save_additions()
+
+    # Обработка внешних данных
+    ext_df = load_external_data(args.external) if args.external else pd.DataFrame()
+
+    # Подготовка
+    series = df[args.column]
+    dataset_words = extract_words_from_series(series)
+    external_words = extract_words_from_series(ext_df.stack()) if not ext_df.empty else set()
+    base_keys = set(car_brands_models.keys())
+    candidates = (dataset_words | external_words) - base_keys
+
+    # Автоматическое добавление
+    additions = prepare_additions_fast(base_keys, candidates, threshold=0.85)
+    for k, v in additions.items():
+        car_brands_models[k] = v
+    added_pairs.update(additions)
+    save_additions()
+
+    # Создаем структуру
+    final_struct = build_final_struct(car_brands_models, additions)
+    pattern = final_struct.get("pattern")
+    mapping = final_struct.get("map", {})
+
+    # Обработка данных
+    df["Исходное"] = df[args.column]
+    df["Обработанное"] = df[args.column].astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=True))
+
+    # Создаем колонку "Перевод" (если нужно)
+    df["Перевод"] = df["Обработанное"]
+
+    # Создаем колонку "Обработанное" (уже есть)
+    # Экспорт
+    output_path = args.output or ("result.xlsx" if args.input.lower().endswith(('.xls', '.xlsx')) else "result.csv")
+    try:
+        if output_path.lower().endswith(('.xls', '.xlsx')):
+            df.to_excel(output_path, index=False)
+        else:
+            df.to_csv(output_path, index=False, encoding=CSV_ENCODING)
+        print("Результат сохранен:", output_path)
+    except Exception as e:
+        print("Ошибка сохранения:", e)
+
 
 if __name__ == "__main__":
     main()
