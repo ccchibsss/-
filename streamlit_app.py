@@ -436,7 +436,6 @@ car_brands_models: Dict[str, str] = {
   "Chassis Cab": "Шасси-Кабина",
   "Panel Van": "Панель Ван"
 }
-}
 
 # Загрузка пользовательских добавлений
 if os.path.exists(ADDITIONS_FILE):
