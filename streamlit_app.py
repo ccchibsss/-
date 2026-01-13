@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Полный исправленный код с устранением всех ошибок
+# Полный исправленный и улучшенный код
 
 from __future__ import annotations
 import io
@@ -26,7 +26,7 @@ except Exception:
 CSV_ENCODING = "utf-8-sig"
 ADDITIONS_FILE = "additional_brands.json"
 
-# Базовые данные (убраны дубликаты)
+# Базовые данные (обновлены и без дублирования)
 car_brands_models: Dict[str, str] = {
     # BMW
     "BMW": "БМВ",
@@ -85,7 +85,7 @@ car_brands_models: Dict[str, str] = {
     # ЗАЗ
     "ZAZ": "Заз",
 
-    # ВАЗ/Lada
+    # ВАЗ / Lada
     "Vaz": "Ваз",
     "Lada": "Лада",
     "Vesta": "Веста",
@@ -123,7 +123,6 @@ car_brands_models: Dict[str, str] = {
     "BYD Yuan": "Байджи Юань",
     "BYD Qin": "Байджи Цин",
     "BYD Yuan EV": "Байджи Юань ЕВ",
-    
     "Geely": "Джили",
     "Geely Atlas": "Джили Атлас",
     "Geely Coolray": "Джили Кулрэй",
@@ -132,7 +131,6 @@ car_brands_models: Dict[str, str] = {
     "Geely Atlas Pro": "Джили Атлас Про",
     "Geely Geometry": "Джили Геометрия",
     "Geely Preface": "Джили Префейс",
-    
     "Haval": "Хавал",
     "Haval Jolion": "Хавал Джолион",
     "Haval H9": "Хавал Н9",
@@ -140,14 +138,12 @@ car_brands_models: Dict[str, str] = {
     "Haval F7": "Хавал F7",
     "Haval H2": "Хавал H2",
     "Haval H5": "Хавал H5",
-    
     "Lifan": "Лифан",
     "Lifan X60": "Лифан X60",
     "Lifan Myway": "Лифан Майвэй",
     "Lifan Solano": "Лифан Солано",
     "Lifan 820": "Лифан 820",
     "Lifan KPR": "Лифан КРП",
-    
     "Chery": "Черри",
     "Chery Tiggo 2": "Черри Тигго 2",
     "Chery Tiggo 7": "Черри Тигго 7",
@@ -155,37 +151,30 @@ car_brands_models: Dict[str, str] = {
     "Chery Tiggo 8": "Черри Тигго 8",
     "Chery QQ": "Черри QQ",
     "Chery Tiggo 3": "Черри Тигго 3",
-    
     "SAIC": "САЙК",
     "MG": "МГ",
     "Roewe": "Роу",
-    
     "Baojun": "Баоцзюнь",
     "Baojun 530": "Баоцзюнь 530",
     "Baojun 510": "Баоцзюнь 510",
     "Baojun RC-6": "Баоцзюнь RC-6",
-    
     "Wuling": "Вулинг",
     "Wuling Hongguang": "Вулинг Хонггуан",
     "Wuling Rongguang": "Вулинг Жунгуан",
     "Wuling Sunshine": "Вулинг Саншайн",
-    
     "JAC": "Джак",
     "JAC S2": "Джак S2",
     "JAC Refine S4": "Джак Рефайн S4",
     "JAC iEV": "Джак iEV",
-    
     "NIO": "Нио",
     "NIO ES6": "Нио ES6",
     "NIO EC6": "Нио EC6",
     "NIO ET7": "Нио ET7",
     "NIO ES8": "Нио ES8",
-    
     "XPeng": "ХПэнг",
     "XPeng P7": "ХПэнг P7",
     "XPeng G3": "ХПэнг G3",
     "XPeng G9": "ХПэнг G9",
-    
     "Lynk & Co": "Линк & Ко",
     "Lynk & Co 01": "Линк & Ко 01",
     "Lynk & Co 03": "Линк & Ко 03",
@@ -343,10 +332,10 @@ car_brands_models: Dict[str, str] = {
     "Rostec Electric": "Ростех электромобиль"
 }
 
-# Объявляем глобальную переменную для новых пар
+# Глобальные переменные для дополнений
 added_pairs: Dict[str, str] = {}
 
-# Загрузка пользовательских добавлений
+# Загрузка дополнительных данных
 if os.path.exists(ADDITIONS_FILE):
     try:
         with open(ADDITIONS_FILE, "r", encoding="utf-8") as f:
@@ -355,7 +344,6 @@ if os.path.exists(ADDITIONS_FILE):
                 car_brands_models.update({str(k): str(v) for k, v in loaded.items()})
     except Exception:
         pass
-
 
 @lru_cache(maxsize=10000)
 def decline_word_cached(word: str) -> str:
@@ -368,8 +356,7 @@ def decline_word_cached(word: str) -> str:
     except Exception:
         return word
 
-
-# Исправленные правила транслитерации (без дубликатов)
+# Правила транслитерации
 LAT_TO_CYR_RULES = [
     ("shch", "щ"), ("sht", "шт"), ("sci", "щи"), ("sch", "щ"),
     ("oye", "ое"), ("oyu", "ою"), ("iya", "ия"), ("iye", "ие"),
@@ -389,9 +376,8 @@ LAT_TO_CYR_RULES = [
     ("j", "й"), ("'", "ь"), ('"', "ъ"),
     ("x", "кс"), ("q", "к"), ("w", "в")
 ]
-
+# Сортировка для правильной обработки
 _LAT_RULES_SORTED = sorted(LAT_TO_CYR_RULES, key=lambda x: -len(x[0]))
-
 
 def latin_to_cyrillic(text: str) -> str:
     if not isinstance(text, str) or not text:
@@ -418,7 +404,7 @@ def latin_to_cyrillic(text: str) -> str:
         if word[0].isupper():
             return out_str.capitalize()
         return out_str
-    
+
     parts = re.split(r'(\s+)', text)
     res = []
     for p in parts:
@@ -433,14 +419,11 @@ def latin_to_cyrillic(text: str) -> str:
             res.append(p)
     return "".join(res)
 
-
 def contains_latin(text: str) -> bool:
     return bool(re.search(r'[A-Za-z]', str(text)))
 
-
 def contains_cyrillic(text: str) -> bool:
     return bool(re.search(r'[\u0400-\u04FF]', str(text)))
-
 
 def build_final_struct(base_map: Dict[str, str], additions: Optional[Dict[str, str]] = None) -> Dict:
     final_map = {**base_map}
@@ -461,7 +444,6 @@ def build_final_struct(base_map: Dict[str, str], additions: Optional[Dict[str, s
     
     return {"pattern": pattern, "map": mapping, "len_max": max((len(k) for k in final_map.keys()), default=0)}
 
-
 def format_custom(text: str, final_struct: Dict) -> str:
     if not isinstance(text, str) or not final_struct:
         return text
@@ -469,41 +451,38 @@ def format_custom(text: str, final_struct: Dict) -> str:
     years_match = re.search(r'(\d{4}\s*[~\-\–]\s*\d{4})', text)
     years = years_match.group(1) if years_match else ""
     text_no_years = text.replace(years, "").strip()
-    
+
     pattern_pairs = re.findall(r'\([^\)]+\)|[A-Za-z0-9\-\.]+|[А-Яа-я0-9\-\.]+', text_no_years)
     brand = ""
     model = ""
-    
     if pattern_pairs:
         brand_candidate = pattern_pairs[0]
         model_candidate = pattern_pairs[1] if len(pattern_pairs) > 1 else ""
-        # ИСПРАВЛЕНО: убраны лишние символы в регулярном выражении
         brand = re.sub(r'^[\(\s]+|[\)\s]+', '', brand_candidate)
         model = re.sub(r'^[\(\s]+|[\)\s]+', '', model_candidate)
-    
+
     mp = final_struct.get("map", {})
     ru_brand = ""
     ru_model = ""
-    
+
     if brand:
         val = mp.get(brand.lower())
         if val:
             ru_brand = val[1] if isinstance(val, (list, tuple)) and len(val) > 1 else ""
-    
     if model:
         val = mp.get(model.lower())
         if val:
             ru_model = val[1] if isinstance(val, (list, tuple)) and len(val) > 1 else ""
-    
+
     parts = []
     if brand:
         parts.append(brand)
     if model:
         parts.append(model)
-    
+
     main = " ".join(parts).strip() or text.strip()
     extras = []
-    
+
     if ru_brand:
         extras.append(ru_brand)
     if ru_model:
@@ -511,26 +490,25 @@ def format_custom(text: str, final_struct: Dict) -> str:
     if years:
         main = f"{main} {years}" if main else years
         extras.append(years)
-    
+
     if extras:
         return f"{main} ({' '.join(extras).strip()})"
     return main
-
 
 def translate_full_string(text: str, final_struct: Dict) -> str:
     parts = [part.strip() for part in str(text).split('/')]
     translated_parts = [format_custom(part, final_struct) for part in parts]
     return " / ".join(translated_parts)
 
-
 def process_text_fast(text: str, final_struct: Dict, translit_allowed: bool = True) -> str:
     if not isinstance(text, str) or not final_struct:
         return text
-    
+
     pattern_delim = re.compile(r'([/;])')
     if any(d in text for d in ['/', ';']):
         parts = pattern_delim.split(text)
         result_parts = []
+
         for part in parts:
             if part in ['/', ';']:
                 result_parts.append(part)
@@ -557,7 +535,6 @@ def process_text_fast(text: str, final_struct: Dict, translit_allowed: bool = Tr
             else:
                 return format_custom(text, final_struct)
 
-
 def load_external_data(url: str) -> pd.DataFrame:
     if not url:
         return pd.DataFrame()
@@ -565,6 +542,7 @@ def load_external_data(url: str) -> pd.DataFrame:
         resp = requests.get(url, timeout=15)
         resp.raise_for_status()
         ct = resp.headers.get("Content-Type", "").lower()
+
         if "text/csv" in ct or url.lower().endswith(".csv"):
             txt = resp.content.decode(CSV_ENCODING, errors="ignore")
             return pd.read_csv(io.StringIO(txt))
@@ -575,29 +553,25 @@ def load_external_data(url: str) -> pd.DataFrame:
     except Exception:
         return pd.DataFrame()
 
-
 def extract_words_from_series(series: pd.Series) -> Set[str]:
     if series is None:
         return set()
     all_text = series.dropna().astype(str).str.cat(sep=' ')
     return set(re.findall(r'[A-Za-zА-Яа-я0-9\-_/\.]+', all_text))
 
-
 def save_additions():
     try:
         with open(ADDITIONS_FILE, "w", encoding="utf-8") as f:
-            json.dump({str(k): str(v) for k, v in {**car_brands_models, **added_pairs}.items()}, 
-                     f, ensure_ascii=False, indent=2)
+            json.dump({str(k): str(v) for k, v in {**car_brands_models, **added_pairs}.items()}, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
 
-
 def load_dictionary(source: Optional[str] = None, fileobj: Optional[io.BytesIO] = None) -> Dict[str, str]:
     """Загрузка словаря из файла или URL"""
-    result = {}
+    result: Dict[str, str] = {}
     try:
         if fileobj is not None:
-            # Загрузка из файла Streamlit
+            # Загрузка из файла streamlit или файла
             if source and source.lower().endswith('.json'):
                 content = fileobj.getvalue().decode('utf-8')
                 data = json.loads(content)
@@ -609,7 +583,7 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[io.BytesIO] 
                 if len(df.columns) >= 2:
                     result = dict(zip(df.iloc[:, 0], df.iloc[:, 1]))
         elif source:
-            # Загрузка из URL
+            # Загрузка из URL или файла
             if source.startswith('http'):
                 resp = requests.get(source, timeout=10)
                 if source.lower().endswith('.json'):
@@ -622,29 +596,23 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[io.BytesIO] 
                     if len(df.columns) >= 2:
                         result = dict(zip(df.iloc[:, 0], df.iloc[:, 1]))
             else:
-                # Загрузка из локального файла
+                # Локальный файл
                 if source.lower().endswith('.json'):
                     with open(source, 'r', encoding='utf-8') as f:
                         data = json.load(f)
+                elif source.lower().endswith('.csv'):
+                    df = pd.read_csv(source)
                 else:
-                    if source.lower().endswith('.csv'):
-                        df = pd.read_csv(source)
-                    else:
-                        df = pd.read_excel(source)
-                    if len(df.columns) >= 2:
-                        result = dict(zip(df.iloc[:, 0], df.iloc[:, 1]))
-        
-        # Преобразование в нужный формат
-        if isinstance(result, dict):
-            return {str(k): str(v) for k, v in result.items()}
-        return {}
+                    df = pd.read_excel(source)
+                if len(df.columns) >= 2:
+                    result = dict(zip(df.iloc[:, 0], df.iloc[:, 1]))
+        return {str(k): str(v) for k, v in result.items()}
     except Exception:
         return {}
 
-
 def prepare_additions_fast(base_keys: set, candidates: set, threshold: float = 0.85) -> Dict[str, str]:
-    """Сравнивает по сочетаниям латиницы и буквам"""
-    additions = {}
+    """Автоматическое добавление по сходству"""
+    additions: Dict[str, str] = {}
     for candidate in candidates:
         for base in base_keys:
             similarity_full = SequenceMatcher(None, candidate, base).ratio()
@@ -652,6 +620,7 @@ def prepare_additions_fast(base_keys: set, candidates: set, threshold: float = 0
                 additions[candidate] = base
                 break
             else:
+                # сравнение по буквам
                 candidate_letters = sorted(candidate.lower())
                 base_letters = sorted(base.lower())
                 similarity_letters = SequenceMatcher(None, "".join(candidate_letters), "".join(base_letters)).ratio()
@@ -659,7 +628,6 @@ def prepare_additions_fast(base_keys: set, candidates: set, threshold: float = 0
                     additions[candidate] = base
                     break
     return additions
-
 
 # --- UI и CLI ---
 
@@ -691,7 +659,6 @@ def run_streamlit_app() -> None:
                 loaded = load_dictionary(source=dict_url)
             except Exception as e:
                 st.error(f"Не удалось загрузить словарь по URL: {e}")
-        
         if loaded:
             for k, v in loaded.items():
                 car_brands_models[k] = v
@@ -759,41 +726,32 @@ def run_streamlit_app() -> None:
         pattern = final_struct.get("pattern")
         mapping = final_struct.get("map", {})
 
-        # Создаем новые колонки: исходное и обработанное
+        # Обработка данных
         df["Исходное"] = df[col]
         df["Обработанное"] = df[col].astype(str).apply(
             lambda v: process_text_fast(v, final_struct, translit_allowed=translit_allowed)
         )
 
-        # Создаем HTML таблицу с подсветкой исходных данных
+        # Создаем HTML таблицу с подсветкой
         def create_html_table(df: pd.DataFrame, pattern: re.Pattern, mapping: Dict) -> str:
             html_rows = ""
-            for idx in df.index[:200]:  # Ограничиваем для производительности
+            for idx in df.index[:200]:
                 original = df.at[idx, "Исходное"]
-
                 def replacer(match):
                     f = match.group(0)
                     info = mapping.get(f.lower())
                     if info:
                         return f"<mark style='background:#fffd8a'>{f} ({info[1]})</mark>"
                     return f
-                
                 highlighted_value = pattern.sub(replacer, str(original)) if pattern else str(original)
-                
-                if pattern and "<mark" in highlighted_value:
-                    style = "background-color:#ffff99"
-                    icon = "🔍"
-                else:
-                    style = ""
-                    icon = "⚪"
-                
+                style = "background-color:#ffff99" if "<mark" in highlighted_value else ""
+                icon = "🔍" if "<mark" in highlighted_value else "⚪"
                 html_rows += (
                     f"<tr>"
                     f"<td style='padding:6px;border:1px solid #ddd; {style}' title='Исходное: {original}'><code>{original}</code></td>"
                     f"<td style='padding:6px;border:1px solid #ddd'>{icon} {highlighted_value}</td>"
                     f"</tr>"
                 )
-            
             html_table = (
                 "<table style='width:100%;border-collapse:collapse'>"
                 "<thead><tr><th>Исходное</th><th>Подсветка</th></tr></thead>"
@@ -804,10 +762,8 @@ def run_streamlit_app() -> None:
         html_table = create_html_table(df, pattern, mapping)
         st.markdown(html_table, unsafe_allow_html=True)
 
-        # Таблица с двумя колонками: исходное и обработанное
         with st.expander("Полная таблица с исходным и обработанным"):
-            display_df = df[["Исходное", "Обработанное"]]
-            st.dataframe(display_df)
+            st.dataframe(df[["Исходное", "Обработанное"]])
 
         # Экспорт
         export_format = st.radio("Формат экспорта", ("CSV", "Excel"))
@@ -815,18 +771,15 @@ def run_streamlit_app() -> None:
             buf = io.BytesIO()
             df.to_excel(buf, index=False)
             buf.seek(0)
-            st.download_button("Скачать Excel", buf, file_name="result.xlsx", 
-                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("Скачать Excel", buf, file_name="result.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         else:
             csv_bytes = df.to_csv(index=False, encoding=CSV_ENCODING).encode(CSV_ENCODING)
             st.download_button("Скачать CSV", csv_bytes, file_name="result.csv", mime="text/csv")
-
 
 def main():
     if st:
         run_streamlit_app()
         return
-    
     import argparse
     parser = argparse.ArgumentParser(description="Автообработка")
     parser.add_argument("--input", "-i", help="Входной файл CSV/XLSX")
@@ -842,12 +795,12 @@ def main():
         for k in sorted(car_brands_models):
             print(k, "→", car_brands_models[k])
         return
-    
+
     if not args.input or not args.column:
         print("Укажите --input и --column, или --list")
         return
-
-    # Обработка файла из командной строки
+    
+    # Чтение файла
     try:
         if args.input.lower().endswith(('.xls', '.xlsx')):
             df = pd.read_excel(args.input)
@@ -870,17 +823,17 @@ def main():
             added_pairs.update(loaded)
             save_additions()
 
-    # Обработка внешних данных
+    # Внешние данные
     ext_df = load_external_data(args.external) if args.external else pd.DataFrame()
 
-    # Подготовка
+    # Подготовка данных
     series = df[args.column]
     dataset_words = extract_words_from_series(series)
     external_words = extract_words_from_series(ext_df.stack()) if not ext_df.empty else set()
     base_keys = set(car_brands_models.keys())
     candidates = (dataset_words | external_words) - base_keys
 
-    # Автоматическое добавление с улучшенной логикой
+    # Автоматическое добавление
     additions = prepare_additions_fast(base_keys, candidates, threshold=0.85)
     for k, v in additions.items():
         car_brands_models[k] = v
@@ -898,7 +851,7 @@ def main():
         lambda v: process_text_fast(v, final_struct, translit_allowed=True)
     )
 
-    # Экспорт
+    # Сохранение результата
     output_path = args.output or ("result.xlsx" if args.input.lower().endswith(('.xls', '.xlsx')) else "result.csv")
     try:
         if output_path.lower().endswith(('.xls', '.xlsx')):
@@ -907,8 +860,7 @@ def main():
             df.to_csv(output_path, index=False, encoding=CSV_ENCODING)
         print("Результат сохранен:", output_path)
     except Exception as e:
-        print("Ошибка сохранения:", e)
-
+        print("Ошибка при сохранении:", e)
 
 if __name__ == "__main__":
     main()
