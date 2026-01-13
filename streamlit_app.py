@@ -661,11 +661,15 @@ def run_streamlit_app() -> None:
             st.info("Новые кандидаты не найдены по порогу.")
 
         final_struct = build_final_struct(car_brands_models, additions)
-        # Обработка и подготовка для скачивания: создаем df с исходным и обработанным
+        # Объявляем patt и mapping перед подсветкой
+        patt = final_struct.get("pattern")
+        mapping = final_struct.get("map", {})
+
+        # Обработка и подготовка для скачивания
         df["_processed"] = df[col].fillna("").astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=translit_allowed))
         download_df = df[[col, "_processed"]].rename(columns={col: "Исходник", "_processed": "Обработанный"})
 
-        # Показываем таблицу с подсветкой (оставляем как есть)
+        # Таблица с подсветкой
         def highlight_html(text: str) -> str:
             if not text or patt is None:
                 return text or ""
@@ -686,7 +690,7 @@ def run_streamlit_app() -> None:
         table_html = "<table style='width:100%;border-collapse:collapse'><thead><tr><th>Оригинал</th><th>Подсветка</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
         st.markdown(table_html, unsafe_allow_html=True)
 
-        # Экспорт в файл, где есть оба столбца
+        # Экспорт
         export_choice = st.radio("Формат экспорта", ("CSV", "Excel"))
         if export_choice == "Excel":
             buf = io.BytesIO()
@@ -701,6 +705,7 @@ def run_streamlit_app() -> None:
             csv_str = download_df.to_csv(index=False, encoding=CSV_ENCODING)
             csv_bytes = csv_str.encode(CSV_ENCODING)
             st.download_button("Скачать CSV", csv_bytes, file_name="result.csv", mime="text/csv")
+
 
 # ---------------- CLI режим ----------------
 def process_file_cli(input_path: str, column: str, external_url: Optional[str], output_path: Optional[str], dict_source: Optional[str]) -> None:
