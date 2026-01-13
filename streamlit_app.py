@@ -332,7 +332,7 @@ car_brands_models: Dict[str, str] = {
     "Lada Vesta Sport": "Лада Веста Спорт",
     "Lada XRAY Cross": "Лада ХРей Кросс"
 }
-    
+}    
 # Объявляем глобальную переменную для новых пар
 added_pairs: Dict[str, str] = {}
 
