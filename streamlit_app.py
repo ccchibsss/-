@@ -30,6 +30,7 @@ ADDITIONS_FILE = "additional_brands.json"
 # Базовый словарь
 car_brands_models: Dict[str, str] = {
     {
+  {
   "BMW": "БМВ",
   "1 Series": "1 Серия",
   "2 Series": "2 Серия",
@@ -178,7 +179,6 @@ car_brands_models: Dict[str, str] = {
   "Gaz": "Газ",
   "GAZelle": "ГАЗель",
   "GAZelle Next": "ГАЗель Некст",
-  "Gazelle Next": "ГАЗель Некст",
   "Sobol": "Соболь",
   "Sobol 4x4": "Соболь 4х4",
   "ZAZ": "Заз",
@@ -402,39 +402,8 @@ car_brands_models: Dict[str, str] = {
   "Insignia": "Инсигния",
   "Vivaro": "Виваро",
   "Movano": "Мовано",
-  "Combo": "Комбо",
-  "Vauxhall": "Воксхолл",
-  "Peugeot Partner": "Пежо Партнёр",
-  "Citroen": "Ситроен",
-  "Berlingo": "Берлинго",
-  "Jumper": "Джампер",
-  "Citroen Jumper": "Ситроен Джампер",
-  "Iveco": "Ивеко",
-  "Daily": "Дейли",
-  "Iveco Daily Van": "Ивеко Дейли Фургон",
-  "Maxus": "Максус",
-  "V80": "В80",
-  "G10": "Г10",
-  "V80 LDV": "В80 ЛДВ",
-  "LDV": "ЛДВ",
-  "Foton": "Фотон",
-  "View": "Вью",
-  "Changan": "Чанган",
-  "Omoda": "Омода",
-  "Dongfeng": "Донгфэнг",
-  "SouEast": "СаутИст",
-  "Tata": "Тата",
-  "Mahindra": "Махиндра",
-  "Hybrid": "Гибрид",
-  "Plug-in Hybrid": "Подключаемый гибрид",
-  "Electric": "Электро",
-  "Van": "Фургон",
-  "Minivan": "Минивэн",
-  "MPV": "МПВ",
-  "Pickup": "Пикап",
-  "Crew Cab": "Дабл Кэб",
-  "Chassis Cab": "Шасси-Кабина",
-  "Panel Van": "Панель Ван"
+  "Combo": "Комбо"
+}
 }
 
 # Загрузка пользовательских добавлений
