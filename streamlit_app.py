@@ -29,7 +29,6 @@ ADDITIONS_FILE = "additional_brands.json"
 
 # Базовые данные
 car_brands_models: Dict[str, str] = {
-    car_brands = {
     # BMW
     "BMW": "БМВ",
     "1 Series": "1 Серия",
@@ -331,7 +330,6 @@ car_brands_models: Dict[str, str] = {
     "Lada Niva Travel": "Лада Нива Тревел",
     "Lada Vesta Sport": "Лада Веста Спорт",
     "Lada XRAY Cross": "Лада ХРей Кросс"
-}
 }    
 # Объявляем глобальную переменную для новых пар
 added_pairs: Dict[str, str] = {}
