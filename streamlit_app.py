@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-# Полный скрипт с улучшенной визуализацией, цветными ячейками и иконками
+# Полный скрипт с исправлением и улучшениями
 
 from __future__ import annotations
 import io
-import re
 import os
+import re
 import json
 import requests
 import pandas as pd
@@ -27,7 +27,7 @@ except Exception:
 CSV_ENCODING = "utf-8-sig"
 ADDITIONS_FILE = "additional_brands.json"
 
-# Базовый словарь
+# Глобальные переменные
 car_brands_models: Dict[str, str] = {
     "BMW": "БМВ",
 "1 Series": "1 Серия", "2 Series": "2 Серия", "3 Series": "3 Серия",
@@ -134,6 +134,8 @@ car_brands_models: Dict[str, str] = {
 "Chassis Cab": "Шасси-Кабина", "Panel Van": "Панель Ван",
 }
 
+added_pairs: Dict[str, str] = {}  # <-- добавлено для хранения новых пар
+
 # Загрузка пользовательских добавлений
 if os.path.exists(ADDITIONS_FILE):
     try:
@@ -141,6 +143,7 @@ if os.path.exists(ADDITIONS_FILE):
             loaded = json.load(f)
             if isinstance(loaded, dict):
                 car_brands_models.update({str(k): str(v) for k, v in loaded.items()})
+                added_pairs.update({str(k): str(v) for k, v in loaded.items()})
     except Exception:
         pass
 
@@ -395,7 +398,7 @@ def extract_words_from_series(series: pd.Series) -> Set[str]:
 def save_additions():
     try:
         with open(ADDITIONS_FILE, "w", encoding="utf-8") as f:
-            json.dump({str(k): str(v) for k, v in added_pairs.items()}, f, ensure_ascii=False, indent=2)
+            json.dump({str(k): str(v) for k, v in {**car_brands_models, **added_pairs}.items()}, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
 
@@ -434,8 +437,7 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[Any] = None)
         except Exception:
             pass
         try:
-            df = pd.read_csv(io.StringIO(text))
-            return parse_mapping_from_dataframe(df)
+            return parse_mapping_from_dataframe(pd.read_csv(io.StringIO(text)))
         except Exception:
             pass
         try:
@@ -539,7 +541,7 @@ def run_streamlit_app() -> None:
     if st is None:
         return
     st.set_page_config(page_title="Автообработка (улучшенная)", layout="wide")
-    st.title("Распознавание брендов/моделей")
+    st.title("Распознавание брендов/моделей — улучшенная визуализация")
     st.markdown("Загрузите CSV/XLSX, выберите столбец — скрипт автоматически подсветит совпадения с словарем.")
 
     sidebar = st.sidebar
