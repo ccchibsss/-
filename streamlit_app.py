@@ -103,7 +103,7 @@ car_brands_models = {
 "Z4": "Зет 4",
 
 # BYD
-"BYD": "Байджи",
+"BYD": "БАД",
 "BYD Atto 3": "Атто 3",
 "BYD Dolphin": "Байджи Дельфин",
 "BYD Han": "Байджи Хан",
