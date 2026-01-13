@@ -244,18 +244,16 @@ def save_additions():
     except Exception:
         pass
 
-# Новая функция: сначала сравнивает по сочетаниям латиницы, потом по буквам
+# Новая функция: сравнивает по сочетаниям латиницы и буквам
 def prepare_additions_fast(base_keys: set, candidates: set, threshold: float = 0.85) -> Dict[str, str]:
     additions = {}
     for candidate in candidates:
         for base in base_keys:
-            # Сравнение по всем символам
             similarity_full = SequenceMatcher(None, candidate, base).ratio()
             if similarity_full >= threshold:
                 additions[candidate] = base
                 break
             else:
-                # Попытка сравнить по наборам букв (без учета порядка)
                 candidate_letters = sorted(candidate.lower())
                 base_letters = sorted(base.lower())
                 similarity_letters = SequenceMatcher(None, "".join(candidate_letters), "".join(base_letters)).ratio()
@@ -342,7 +340,7 @@ def run_streamlit_app() -> None:
         base_keys = set(car_brands_models.keys())
         candidates = (dataset_words | external_words) - base_keys
 
-        # Автоматическое добавление с новой логикой
+        # Автоматическое добавление с улучшенной логикой
         additions = prepare_additions_fast(base_keys, candidates, threshold=threshold)
         if additions:
             for k, v in additions.items():
@@ -392,7 +390,7 @@ def run_streamlit_app() -> None:
         html_table = create_html_table(df, pattern, mapping)
         st.markdown(html_table, unsafe_allow_html=True)
 
-        # Отображение таблицы с двумя колонками
+        # Таблица с двумя колонками: исходное и обработанное
         with st.expander("Полная таблица с исходным и обработанным"):
             display_df = df[["Исходное", "Обработанное"]]
             st.dataframe(display_df)
@@ -480,9 +478,6 @@ def main():
     # Обработка данных
     df["Исходное"] = df[args.column]
     df["Обработанное"] = df[args.column].astype(str).apply(lambda v: process_text_fast(v, final_struct, translit_allowed=True))
-
-    # Создаем колонку "Перевод" (если нужно)
-    df["Перевод"] = df["Обработанное"]
 
     # Экспорт
     output_path = args.output or ("result.xlsx" if args.input.lower().endswith(('.xls', '.xlsx')) else "result.csv")
