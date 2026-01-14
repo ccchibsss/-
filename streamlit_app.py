@@ -1,5 +1,6 @@
-#!/usr/bin/env python3
-# Улучшенное, оптимизированное и более красочное приложение Streamlit для замены и предварительного просмотра брендов/моделей авто
+# !/usr/bin/env python3
+# Улучшенное, оптимизированное и более красочное приложение Streamlit для замены
+# и предварительного просмотра брендов/моделей авто
 import io
 import os
 import json
@@ -10,7 +11,8 @@ import pandas as pd
 import requests
 import streamlit as st
 
-# Необязательный морфологический анализатор (если есть — используется для склонения)
+# Необязательный морфологический анализатор (если есть — используется для
+# склонения)
 try:
     import pymorphy2
     morph = pymorphy2.MorphAnalyzer()
@@ -127,6 +129,8 @@ def get_matches(text: str, struct: Dict[str, Any]) -> List[Tuple[int, int, str, 
             last_end = e
     return filtered
 
+HIGHLIGHT_STYLE = "background: #ffeb3b; color: #000; padding: 0 2px; border-radius: 2px;"
+
 def highlight_html(text: str, matches: List[Tuple[int, int, str, str]]) -> str:
     if not matches:
         return escape_html(text)
@@ -156,21 +160,21 @@ def process_text(text: str, struct: Dict[str, Any]) -> Tuple[str, str]:
 def load_dictionary(source: Optional[str] = None, fileobj: Optional[io.BytesIO] = None) -> Dict[str, str]:
     try:
         if fileobj is not None:
-            if hasattr(fileobj, "read"):
-                data = fileobj.read()
-                b = io.BytesIO(data)
-                name = getattr(fileobj, "name", "") or source or ""
+            # безопасно получить байты и работать с копиями, не "съедая" исходный объект
+            if hasattr(fileobj, "getvalue"):
+                data_bytes = fileobj.getvalue()
             else:
-                b = fileobj
-                name = source or ""
+                data_bytes = fileobj.read()
+            name = getattr(fileobj, "name", "") or source or ""
             if name.lower().endswith(".json"):
-                text = b.getvalue().decode("utf-8")
+                text = data_bytes.decode("utf-8")
                 obj = json.loads(text)
                 return {str(k): str(v) for k, v in (obj.items() if isinstance(obj, dict) else [])}
             if name.lower().endswith(".csv"):
-                df = pd.read_csv(b)
+                text = data_bytes.decode("utf-8")
+                df = pd.read_csv(io.StringIO(text))
             else:
-                df = pd.read_excel(b, engine='openpyxl')
+                df = pd.read_excel(io.BytesIO(data_bytes), engine='openpyxl')
             if len(df.columns) >= 2:
                 return {str(k): str(v) for k, v in zip(df.iloc[:,0], df.iloc[:,1])}
         if source:
@@ -211,11 +215,15 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[io.BytesIO] 
     return {}
 
 def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, struct: Dict[str, Any]) -> pd.DataFrame:
-    stream = io.BytesIO(file_bytes)
+    # Создаём копию потоков, корректно обрабатываем CSV (как строковый поток) и Excel (как байтовый)
     if filename.lower().endswith(".csv"):
-        df = pd.read_csv(stream)
+        try:
+            text = file_bytes.decode("utf-8")
+        except Exception:
+            text = file_bytes.decode("cp1251", errors="replace")
+        df = pd.read_csv(io.StringIO(text))
     else:
-        df = pd.read_excel(stream, engine='openpyxl')
+        df = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
 
     if col_name not in df.columns:
         raise ValueError(f"Столбец '{col_name}' не найден в файле.")
@@ -300,10 +308,12 @@ def run():
 
         if uploaded and not col_name:
             try:
+                # используем свежую копию байтов, чтобы не "съесть" оригинальный объект
+                data_bytes = uploaded.getvalue()
                 if uploaded.name.lower().endswith(".csv"):
-                    df0 = pd.read_csv(uploaded, nrows=0)
+                    df0 = pd.read_csv(io.StringIO(data_bytes.decode("utf-8")), nrows=0)
                 else:
-                    df0 = pd.read_excel(uploaded, nrows=0, engine='openpyxl')
+                    df0 = pd.read_excel(io.BytesIO(data_bytes), nrows=0, engine='openpyxl')
                 cols = df0.columns.tolist()
                 if cols:
                     col_name = st.selectbox("📑 Выберите столбец", cols)
@@ -313,7 +323,8 @@ def run():
         if uploaded and col_name:
             try:
                 with st.spinner("Обрабатываем..."):
-                    bytes_data = uploaded.read()
+                    # снова используем getvalue() — это безопасно и не зависит от позиции внутреннего указателя
+                    bytes_data = uploaded.getvalue()
                     struct = build_final_struct(base_dict)
                     df_res = process_file_for_processing(bytes_data, uploaded.name, col_name, struct)
                 st.success("✅ Обработка завершена")
