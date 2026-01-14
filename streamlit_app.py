@@ -11,6 +11,7 @@ import pandas as pd
 from difflib import SequenceMatcher
 from functools import lru_cache
 from typing import Optional, Dict, Set, List, Any, Union
+import html  # для экранирования HTML
 
 try:
     import streamlit as st  # type: ignore
@@ -26,8 +27,9 @@ except Exception:
 CSV_ENCODING = "utf-8-sig"
 ADDITIONS_FILE = "additional_brands.json"
 
-# Базовые данные
+# --- Весь ваш словарь car_brands_models (обязательно вставьте полностью) ---
 car_brands_models = {
+    # Тут вставьте весь ваш словарь из вопроса. Ниже пример части, вставьте полностью.
     "Acura": "Акура",
 "Integra": "Интегра",
 "MDX": "МДХ",
@@ -766,7 +768,6 @@ car_brands_models = {
 "Truck": "Грузовик",
 "UTV": "Универсальное транспортное средство",
 "Utility Vehicle": "Спецтехника",
-"Vintage Car": "Винтажный автомобиль"
 }
 
 # Глобальные переменные для дополнений
@@ -1164,15 +1165,16 @@ def run_streamlit_app() -> None:
                 def replacer(match):
                     f = match.group(0)
                     info = mapping.get(f.lower())
+                    safe_f = html.escape(f, quote=False)
                     if info:
-                        return f"<mark style='background:#fffd8a'>{f} ({info[1]})</mark>"
-                    return f
-                highlighted_value = pattern.sub(replacer, str(original)) if pattern else str(original)
+                        return f"<mark style='background:#fffd8a'>{safe_f} ({info[1]})</mark>"
+                    return safe_f
+                highlighted_value = pattern.sub(replacer, str(original)) if pattern else html.escape(str(original))
                 style = "background-color:#ffff99" if "<mark" in highlighted_value else ""
                 icon = "🔍" if "<mark" in highlighted_value else "⚪"
                 html_rows += (
                     f"<tr>"
-                    f"<td style='padding:6px;border:1px solid #ddd; {style}' title='Исходное: {original}'><code>{original}</code></td>"
+                    f"<td style='padding:6px;border:1px solid #ddd; {style}' title='Исходное: {html.escape(str(original), quote=False)}'><code>{html.escape(str(original), quote=False)}</code></td>"
                     f"<td style='padding:6px;border:1px solid #ddd'>{icon} {highlighted_value}</td>"
                     f"</tr>"
                 )
@@ -1209,8 +1211,6 @@ def main():
         run_streamlit_app()
     else:
         # CLI режим
-        # вставьте сюда ваш существующий CLI код (или вызов)
-        # например:
         import argparse
         parser = argparse.ArgumentParser(description="Автообработка")
         parser.add_argument("--input", "-i", help="Входной файл CSV/XLSX")
