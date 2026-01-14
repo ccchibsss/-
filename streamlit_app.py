@@ -1,23 +1,26 @@
-#!/usr/bin/env python3
-# Полный исправленный и улучшенный код с интеграцией Streamlit
-
+# !/usr/bin/env python3
+# Интегрированный ускоренный скрипт: Aho-Corasick/Trie для быстрого поиска +
+# Streamlit UI
 from __future__ import annotations
 import io
 import os
 import re
 import json
+import time
+import html
 import requests
 import pandas as pd
 from difflib import SequenceMatcher
 from functools import lru_cache
-from typing import Optional, Dict, Set, List, Any, Union
-import html  # для экранирования HTML
+from typing import Optional, Dict, Set, List, Tuple, Any
+import concurrent.futures
 
 try:
     import streamlit as st  # type: ignore
 except Exception:
     st = None
 
+# pymorphy2 optional
 try:
     import pymorphy2  # type: ignore
     morph = pymorphy2.MorphAnalyzer()
@@ -27,9 +30,9 @@ except Exception:
 CSV_ENCODING = "utf-8-sig"
 ADDITIONS_FILE = "additional_brands.json"
 
-# --- Весь ваш словарь car_brands_models (обязательно вставьте полностью) ---
-car_brands_models = {
-        "Acura": "Акура",
+# --- Ваш полный словарь — вставьте сюда ---
+car_brands_models: Dict[str, str] = {
+    "Acura": "Акура",
 "Integra": "Интегра",
 "MDX": "МДХ",
 "RDX": "РДХ",
@@ -765,14 +768,11 @@ car_brands_models = {
 "Trailer": "Прицеп",
 "Trash Collector": "Мусоровоз",
 "Truck": "Грузовик",
-"UTV": "Универсальное транспортное средство",
-
+"UTV": "Универсальное транспортное сред
 }
 
-# Глобальные переменные для дополнений
+# Загружаем дополнения
 added_pairs: Dict[str, str] = {}
-
-# Загрузка дополнительных данных
 if os.path.exists(ADDITIONS_FILE):
     try:
         with open(ADDITIONS_FILE, "r", encoding="utf-8") as f:
@@ -784,7 +784,7 @@ if os.path.exists(ADDITIONS_FILE):
 
 @lru_cache(maxsize=10000)
 def decline_word_cached(word: str) -> str:
-    if not word or not morph:
+    if not word or morph is None:
         return word
     try:
         p = morph.parse(word)[0]
@@ -793,7 +793,7 @@ def decline_word_cached(word: str) -> str:
     except Exception:
         return word
 
-# Правила транслитерации
+# транслитерация
 LAT_TO_CYR_RULES = [
     ("shch", "щ"), ("sht", "шт"), ("sci", "щи"), ("sch", "щ"),
     ("oye", "ое"), ("oyu", "ою"), ("iya", "ия"), ("iye", "ие"),
@@ -801,24 +801,19 @@ LAT_TO_CYR_RULES = [
     ("ia", "ия"), ("ya", "я"), ("yo", "ё"), ("yu", "ю"),
     ("zh", "ж"), ("ge", "ж"), ("j", "ж"), ("g", "ж"),
     ("kh", "х"), ("h", "х"), ("x", "х"),
-    ("ts", "ц"), ("tz", "ц"),
-    ("ch", "ч"),
-    ("sh", "ш"),
-    ("ye", "е"), ("i", "и"), ("j", "й"),
-    ("ju", "ю"), ("ja", "я"),
+    ("ts", "ц"), ("tz", "ц"), ("ch", "ч"), ("sh", "ш"),
+    ("ye", "е"), ("i", "и"), ("j", "й"), ("ju", "ю"), ("ja", "я"),
     ("a", "а"), ("b", "б"), ("v", "в"), ("g", "г"), ("d", "д"),
-    ("e", "е"), ("z", "з"), ("i", "и"), ("k", "к"), ("l", "л"),
-    ("m", "м"), ("n", "н"), ("o", "о"), ("p", "п"), ("r", "р"),
-    ("s", "с"), ("t", "т"), ("u", "у"), ("f", "ф"), ("y", "ы"),
-    ("j", "й"), ("'", "ь"), ('"', "ъ"),
-    ("x", "кс"), ("q", "к"), ("w", "в")
+    ("e", "е"), ("z", "з"), ("k", "к"), ("l", "л"), ("m", "м"),
+    ("n", "н"), ("o", "о"), ("p", "п"), ("r", "р"), ("s", "с"),
+    ("t", "т"), ("u", "у"), ("f", "ф"), ("y", "ы"), ("'", "ь"),
+    ('"', "ъ"), ("x", "кс"), ("q", "к"), ("w", "в")
 ]
 _LAT_RULES_SORTED = sorted(LAT_TO_CYR_RULES, key=lambda x: -len(x[0]))
 
 def latin_to_cyrillic(text: str) -> str:
     if not isinstance(text, str) or not text:
         return text
-
     def translit_word(word: str) -> str:
         lower = word.lower()
         i = 0
@@ -840,7 +835,6 @@ def latin_to_cyrillic(text: str) -> str:
         if word[0].isupper():
             return out_str.capitalize()
         return out_str
-
     parts = re.split(r'(\s+)', text)
     res = []
     for p in parts:
@@ -861,109 +855,138 @@ def contains_latin(text: str) -> bool:
 def contains_cyrillic(text: str) -> bool:
     return bool(re.search(r'[\u0400-\u04FF]', str(text)))
 
-def build_final_struct(base_map: Dict[str, str], additions: Optional[Dict[str, str]] = None) -> Dict:
+# Пытаемся импортировать ahocorasick, иначе fallback на Trie
+try:
+    import ahocorasick  # type: ignore
+    _HAS_AHO = True
+except Exception:
+    _HAS_AHO = False
+
+def _is_word_char(ch: str) -> bool:
+    return ch.isalnum() or ch == '_'
+
+# Глобальная переменная для структуры поиска
+search_struct = None
+
+def update_search_struct():
+    global search_struct
+    search_struct = build_final_struct_fast(car_brands_models, added_pairs)
+
+def build_final_struct_fast(base_map: Dict[str, str], additions: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     final_map = {**base_map}
     if additions:
         final_map.update(additions)
+    final_map = {k: v for k, v in final_map.items() if isinstance(k, str) and k.strip()}
     if not final_map:
-        return {"pattern": None, "map": {}, "len_max": 0}
-    keys_sorted = sorted(final_map.keys(), key=len, reverse=True)
-    escaped = [re.escape(k) for k in keys_sorted if k.strip()]
-    pattern = re.compile(r'(?<!\w)(?:' + "|".join(escaped) + r')(?!\w)', flags=re.IGNORECASE)
-    mapping: Dict[str, tuple] = {}
-    for k in keys_sorted:
-        ru = final_map.get(k) or k
-        ru_decl = decline_word_cached(ru)
-        mapping[k.lower()] = (k, ru_decl)
-    return {"pattern": pattern, "map": mapping, "len_max": max((len(k) for k in final_map.keys()), default=0)}
-
-def format_custom(text: str, final_struct: Dict) -> str:
-    if not isinstance(text, str) or not final_struct:
-        return text
-    years_match = re.search(r'(\d{4}\s*[~\-\–]\s*\d{4})', text)
-    years = years_match.group(1) if years_match else ""
-    text_no_years = text.replace(years, "").strip()
-    pattern_pairs = re.findall(r'\([^\)]+\)|[A-Za-z0-9\-\.]+|[А-Яа-я0-9\-\.]+', text_no_years)
-    brand = ""
-    model = ""
-    if pattern_pairs:
-        brand_candidate = pattern_pairs[0]
-        model_candidate = pattern_pairs[1] if len(pattern_pairs) > 1 else ""
-        brand = re.sub(r'^[\(\s]+|[\)\s]+', '', brand_candidate)
-        model = re.sub(r'^[\(\s]+|[\)\s]+', '', model_candidate)
-
-    mp = final_struct.get("map", {})
-    ru_brand = ""
-    ru_model = ""
-
-    if brand:
-        val = mp.get(brand.lower())
-        if val:
-            ru_brand = val[1] if isinstance(val, (list, tuple)) and len(val) > 1 else ""
-    if model:
-        val = mp.get(model.lower())
-        if val:
-            ru_model = val[1] if isinstance(val, (list, tuple)) and len(val) > 1 else ""
-
-    parts = []
-    if brand:
-        parts.append(brand)
-    if model:
-        parts.append(model)
-
-    main = " ".join(parts).strip() or text.strip()
-    extras = []
-
-    if ru_brand:
-        extras.append(ru_brand)
-    if ru_model:
-        extras.append(ru_model)
-    if years:
-        main = f"{main} {years}" if main else years
-        extras.append(years)
-
-    if extras:
-        return f"{main} ({' '.join(extras).strip()})"
-    return main
-
-def translate_full_string(text: str, final_struct: Dict) -> str:
-    parts = [part.strip() for part in str(text).split('/')]
-    translated_parts = [format_custom(part, final_struct) for part in parts]
-    return " / ".join(translated_parts)
-
-def process_text_fast(text: str, final_struct: Dict, pattern: re.Pattern, mapping: Dict, translit_allowed: bool = True) -> str:
-    if not isinstance(text, str) or not final_struct:
-        return text
-    # Используем переданный pattern и mapping
-    if any(d in text for d in ['/', ';']):
-        parts = pattern.split(text)
-        result_parts = []
-        for part in parts:
-            if part in ['/', ';']:
-                result_parts.append(part)
-            else:
-                key_lower = part.lower()
-                if key_lower in mapping:
-                    val = mapping[key_lower][1]
-                    result_parts.append(val)
-                else:
-                    if translit_allowed and contains_latin(part) and not contains_cyrillic(part):
-                        cyr = latin_to_cyrillic(part)
-                        result_parts.append(f"{part} ({decline_word_cached(cyr)})")
-                    else:
-                        result_parts.append(part)
-        return "".join(result_parts)
+        return {"engine": None, "map": {}, "max_len": 0, "use_aho": False}
+    mapping: Dict[str, Tuple[str, str]] = {}
+    max_len = 0
+    for k, v in final_map.items():
+        lk = k.lower()
+        ru = v if v is not None else k
+        ru_decl = decline_word_cached(str(ru))
+        mapping[lk] = (k, ru_decl)
+        if len(lk) > max_len:
+            max_len = len(lk)
+    if _HAS_AHO:
+        A = ahocorasick.Automaton()
+        for lk, pair in mapping.items():
+            A.add_word(lk, (lk, pair))
+        A.make_automaton()
+        return {"engine": A, "map": mapping, "max_len": max_len, "use_aho": True}
     else:
-        key_lower = text.lower()
-        if key_lower in mapping:
-            return mapping[key_lower][1]
-        else:
-            if translit_allowed and contains_latin(text) and not contains_cyrillic(text):
-                cyr = latin_to_cyrillic(text)
-                return f"{text} ({decline_word_cached(cyr)})"
-            else:
-                return format_custom(text, final_struct)
+        trie = {}
+        END = "_end_"
+        for lk, pair in mapping.items():
+            node = trie
+            for ch in lk:
+                node = node.setdefault(ch, {})
+            node[END] = (lk, pair)
+        return {"engine": trie, "map": mapping, "max_len": max_len, "use_aho": False}
 
+def _find_matches_aho(text: str, struct: Dict[str, Any]) -> List[Tuple[int,int,str,str]]:
+    A = struct["engine"]
+    mapping = struct["map"]
+    text_l = text.lower()
+    matches: List[Tuple[int,int,str,str]] = []
+    for end_idx, value in A.iter(text_l):
+        lk, (orig_key, ru_decl) = value
+        start_idx = end_idx - len(lk) + 1
+        if start_idx > 0 and _is_word_char(text_l[start_idx - 1]):
+            continue
+        if end_idx + 1 < len(text_l) and _is_word_char(text_l[end_idx + 1]):
+            continue
+        matches.append((start_idx, end_idx, orig_key, ru_decl))
+    if not matches:
+        return []
+    matches.sort(key=lambda x: (x[0], -(x[1]-x[0])))
+    filtered = []
+    last_end = -1
+    for s,e,ok,ru in matches:
+        if s > last_end:
+            filtered.append((s,e,ok,ru))
+            last_end = e
+    return filtered
+
+def _find_matches_trie(text: str, struct: Dict[str, Any]) -> List[Tuple[int,int,str,str]]:
+    trie = struct["engine"]
+    text_l = text.lower()
+    n = len(text_l)
+    max_len = struct["max_len"]
+    matches: List[Tuple[int,int,str,str]] = []
+    END = "_end_"
+    for i in range(n):
+        node = trie
+        j = i
+        while j < n and (j - i) < max_len and text_l[j] in node:
+            node = node[text_l[j]]
+            if END in node:
+                lk, (orig_key, ru_decl) = node[END]
+                start_idx = i
+                end_idx = j
+                if start_idx > 0 and _is_word_char(text_l[start_idx - 1]):
+                    pass
+                elif end_idx + 1 < n and _is_word_char(text_l[end_idx + 1]):
+                    pass
+                else:
+                    matches.append((start_idx, end_idx, orig_key, ru_decl))
+            j += 1
+    if not matches:
+        return []
+    matches.sort(key=lambda x: (x[0], -(x[1]-x[0])))
+    filtered = []
+    last_end = -1
+    for s,e,ok,ru in matches:
+        if s > last_end:
+            filtered.append((s,e,ok,ru))
+            last_end = e
+    return filtered
+
+def get_matches(text: str, struct: Dict[str, Any]) -> List[Tuple[int,int,str,str]]:
+    if not struct or struct["engine"] is None:
+        return []
+    return _find_matches_aho(text, struct) if struct["use_aho"] else _find_matches_trie(text, struct)
+
+def process_text_fast_optimized(text: str, struct: Dict[str, Any], translit_allowed: bool = True) -> str:
+    if not isinstance(text, str) or not struct:
+        return text
+    matches = get_matches(text, struct)
+    if not matches:
+        if translit_allowed and contains_latin(text) and not contains_cyrillic(text):
+            cyr = latin_to_cyrillic(text)
+            return f"{text} ({decline_word_cached(cyr)})"
+        # fallback
+        return text
+    out_parts = []
+    last = 0
+    for s,e,orig,ru in matches:
+        out_parts.append(text[last:s])
+        out_parts.append(ru)
+        last = e + 1
+    out_parts.append(text[last:])
+    return "".join(out_parts)
+
+# Вспомогательные функции
 def load_external_data(url: str) -> pd.DataFrame:
     if not url:
         return pd.DataFrame()
@@ -995,13 +1018,14 @@ def save_additions():
         pass
 
 def load_dictionary(source: Optional[str] = None, fileobj: Optional[io.BytesIO] = None) -> Dict[str, str]:
-    """Загрузка словаря из файла или URL"""
     result: Dict[str, str] = {}
     try:
         if fileobj is not None:
             if source and source.lower().endswith('.json'):
                 content = fileobj.getvalue().decode('utf-8')
                 data = json.loads(content)
+                if isinstance(data, dict):
+                    result = data
             elif source and source.lower().endswith(('.csv', '.xls', '.xlsx')):
                 if source.lower().endswith('.csv'):
                     df = pd.read_csv(fileobj)
@@ -1014,6 +1038,8 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[io.BytesIO] 
                 resp = requests.get(source, timeout=10)
                 if source.lower().endswith('.json'):
                     data = resp.json()
+                    if isinstance(data, dict):
+                        result = data
                 else:
                     if source.lower().endswith('.csv'):
                         df = pd.read_csv(io.StringIO(resp.text))
@@ -1025,18 +1051,21 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[io.BytesIO] 
                 if source.lower().endswith('.json'):
                     with open(source, 'r', encoding='utf-8') as f:
                         data = json.load(f)
+                        if isinstance(data, dict):
+                            result = data
                 elif source.lower().endswith('.csv'):
                     df = pd.read_csv(source)
+                    if len(df.columns) >= 2:
+                        result = dict(zip(df.iloc[:, 0], df.iloc[:, 1]))
                 else:
                     df = pd.read_excel(source)
-                if len(df.columns) >= 2:
-                    result = dict(zip(df.iloc[:, 0], df.iloc[:, 1]))
+                    if len(df.columns) >= 2:
+                        result = dict(zip(df.iloc[:, 0], df.iloc[:, 1]))
         return {str(k): str(v) for k, v in result.items()}
     except Exception:
         return {}
 
 def prepare_additions_fast(base_keys: set, candidates: set, threshold: float = 0.85) -> Dict[str, str]:
-    """Автоматическое добавление по сходству"""
     additions: Dict[str, str] = {}
     for candidate in candidates:
         for base in base_keys:
@@ -1053,53 +1082,44 @@ def prepare_additions_fast(base_keys: set, candidates: set, threshold: float = 0
                     break
     return additions
 
-# --- UI и CLI ---
-
+# ==========================
+# Основная UI функция
 def run_streamlit_app() -> None:
+    global search_struct
     if st is None:
         return
-
-    # Предварительно создаем структуру после загрузки словаря и возможных дополнений
-    global final_struct, pattern, mapping
-    final_struct = build_final_struct(car_brands_models, added_pairs)
-    pattern = final_struct.get("pattern")
-    mapping = final_struct.get("map", {})
-
-    st.set_page_config(page_title="Автообработка", layout="wide")
-    st.title("Распознавание брендов/моделей")
-    st.markdown("Загрузите CSV/XLSX, выберите столбец — скрипт автоматически подсветит совпадения.")
+    st.set_page_config(page_title="Автообработка (ускорено)", layout="wide")
+    st.title("Распознавание брендов/моделей (ускорено)")
+    st.markdown("Используется Aho-Corasick (если установлен) или Trie для быстрого поиска в большом словаре.")
 
     sidebar = st.sidebar
     threshold = sidebar.slider("Порог для автодобавления", 0.6, 0.99, 0.85, 0.01)
     translit_allowed = sidebar.checkbox("Автотранслитерация (латиница → кириллица)", value=True)
 
-    sidebar.header("Загрузить словарь (опционально)")
+    sidebar.header("Словарь / дополнения")
     dict_file = sidebar.file_uploader("Файл словаря (json/csv/xlsx)", type=["json", "csv", "xls", "xlsx"])
-    dict_url = sidebar.text_input("URL словаря (json/csv/xlsx) — опционально")
+    dict_url = sidebar.text_input("URL словаря (json/csv/xlsx)")
     if sidebar.button("Загрузить словарь"):
         loaded = {}
         if dict_file is not None:
             try:
                 loaded = load_dictionary(source=dict_file.name, fileobj=dict_file)
             except Exception as e:
-                st.error(f"Не удалось загрузить файл словаря: {e}")
+                st.error(f"Ошибка загрузки файла: {e}")
         elif dict_url:
             try:
                 loaded = load_dictionary(source=dict_url)
             except Exception as e:
-                st.error(f"Не удалось загрузить словарь по URL: {e}")
+                st.error(f"Ошибка загрузки по URL: {e}")
         if loaded:
             for k, v in loaded.items():
                 car_brands_models[k] = v
             added_pairs.update(loaded)
             save_additions()
-            # Обновляем структуру после изменения словаря
-            final_struct = build_final_struct(car_brands_models, added_pairs)
-            pattern = final_struct.get("pattern")
-            mapping = final_struct.get("map", {})
-            st.success(f"Загружено {len(loaded)} пар из словаря")
+            update_search_struct()  # пересоздаем структуру
+            st.success(f"Загружено {len(loaded)} пар")
         else:
-            st.info("Словарь не загружен или пустой")
+            st.info("Словарь не загружен или пуст")
 
     sidebar.header("Добавить пару вручную")
     new_k = sidebar.text_input("Ключ (англ)")
@@ -1109,13 +1129,14 @@ def run_streamlit_app() -> None:
             car_brands_models[new_k] = new_v
             added_pairs[new_k] = new_v
             save_additions()
-            # Обновляем структуру после изменения словаря
-            final_struct = build_final_struct(car_brands_models, added_pairs)
-            pattern = final_struct.get("pattern")
-            mapping = final_struct.get("map", {})
+            update_search_struct()  # пересоздаем структуру
             st.success(f"Добавлено: {new_k} → {new_v}")
         else:
-            st.error("Поля обязательны")
+            st.error("Заполните оба поля")
+
+    # Построим структуру поиска один раз перед обработкой
+    if search_struct is None:
+        update_search_struct()
 
     uploaded = st.file_uploader("Выберите CSV/XLSX", type=["csv", "xls", "xlsx"])
     external_url = sidebar.text_input("URL внешних данных (CSV/XLSX) — необязательно")
@@ -1143,60 +1164,61 @@ def run_streamlit_app() -> None:
 
     if st.button("Обработать данные"):
         ext_df = load_external_data(external_url) if external_url else pd.DataFrame()
-
         series = df[col]
         dataset_words = extract_words_from_series(series)
         external_words = extract_words_from_series(ext_df.stack()) if not ext_df.empty else set()
         base_keys = set(car_brands_models.keys())
         candidates = (dataset_words | external_words) - base_keys
 
-        # Автоматическое добавление с новой логикой
+        # Обновление дополнений
         additions = prepare_additions_fast(base_keys, candidates, threshold=threshold)
         if additions:
             for k, v in additions.items():
                 car_brands_models[k] = v
             added_pairs.update(additions)
             save_additions()
-            # Обновляем структуру после добавлений
-            final_struct = build_final_struct(car_brands_models, added_pairs)
-            pattern = final_struct.get("pattern")
-            mapping = final_struct.get("map", {})
+            update_search_struct()
 
-        # Обработка текста
-        df["Исходное"] = df[col]
-        df["Обработанное"] = df[col].astype(str).apply(
-            lambda v: process_text_fast(v, final_struct, pattern, mapping, translit_allowed=translit_allowed)
-        )
+        # Обработка строки параллельно
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            processed_values = list(executor.map(process_single_value, df[col].astype(str)))
+        df["Обработанное"] = processed_values
 
-        # Создаем HTML таблицу с подсветкой
-        def create_html_table(df: pd.DataFrame, pattern: re.Pattern, mapping: Dict) -> str:
+        def highlight_using_matches(text: str, matches: List[Tuple[int,int,str,str]]) -> str:
+            if not matches:
+                return html.escape(text)
+            parts = []
+            last = 0
+            for s,e,orig,ru in matches:
+                parts.append(html.escape(text[last:s]))
+                fragment = html.escape(text[s:e+1])
+                parts.append(f"<mark style='background:#fffd8a'>{fragment} ({html.escape(ru)})</mark>")
+                last = e + 1
+            parts.append(html.escape(text[last:]))
+            return "".join(parts)
+
+        # Создаем HTML таблицу
+        def create_html_table(df: pd.DataFrame, struct: Dict[str, Any]) -> str:
             html_rows = ""
             for idx in df.index[:200]:
-                original = df.at[idx, "Исходное"]
-                def replacer(match):
-                    f = match.group(0)
-                    info = mapping.get(f.lower())
-                    safe_f = html.escape(f, quote=False)
-                    if info:
-                        return f"<mark style='background:#fffd8a'>{safe_f} ({info[1]})</mark>"
-                    return safe_f
-                highlighted_value = pattern.sub(replacer, str(original)) if pattern else html.escape(str(original))
+                original = str(df.at[idx, "Исходное"])
+                matches = get_matches(original, struct)
+                highlighted_value = highlight_using_matches(original, matches)
                 style = "background-color:#ffff99" if "<mark" in highlighted_value else ""
                 icon = "🔍" if "<mark" in highlighted_value else "⚪"
                 html_rows += (
                     f"<tr>"
-                    f"<td style='padding:6px;border:1px solid #ddd; {style}' title='Исходное: {html.escape(str(original), quote=False)}'><code>{html.escape(str(original), quote=False)}</code></td>"
+                    f"<td style='padding:6px;border:1px solid #ddd; {style}' title='Исходное: {html.escape(original, quote=False)}'><code>{html.escape(original, quote=False)}</code></td>"
                     f"<td style='padding:6px;border:1px solid #ddd'>{icon} {highlighted_value}</td>"
                     f"</tr>"
                 )
-            html_table = (
+            return (
                 "<table style='width:100%;border-collapse:collapse'>"
                 "<thead><tr><th>Исходное</th><th>Подсветка</th></tr></thead>"
                 "<tbody>" + html_rows + "</tbody></table>"
             )
-            return html_table
 
-        html_table = create_html_table(df, pattern, mapping)
+        html_table = create_html_table(df, search_struct)
         st.markdown(html_table, unsafe_allow_html=True)
 
         with st.expander("Полная таблица с исходным и обработанным"):
@@ -1208,109 +1230,93 @@ def run_streamlit_app() -> None:
             buf = io.BytesIO()
             df.to_excel(buf, index=False)
             buf.seek(0)
-            st.download_button("Скачать Excel", buf, file_name="result.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("Скачать Excel", buf, file_name="result.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         else:
             csv_bytes = df.to_csv(index=False, encoding=CSV_ENCODING).encode(CSV_ENCODING)
             st.download_button("Скачать CSV", csv_bytes, file_name="result.csv", mime="text/csv")
 
-
-# --- Основная точка входа ---
-
+# ===========================
+# CLI режим
 def main():
-    import sys
-    if "streamlit" in sys.argv[0]:
-        # Запускаем через streamlit
+    import sys, argparse
+    parser = argparse.ArgumentParser(description="Автообработка (ускорено)")
+    parser.add_argument("--input", "-i", help="Входной файл CSV/XLSX")
+    parser.add_argument("--column", "-c", help="Имя столбца")
+    parser.add_argument("--external", "-e", help="URL внешних данных")
+    parser.add_argument("--output", "-o", help="Путь для сохранения")
+    parser.add_argument("--list", action="store_true", help="Показать список словаря")
+    parser.add_argument("--dict", "-d", help="Файл или URL словаря")
+    args = parser.parse_args()
+
+    if args.list:
+        print("Всего ключей в словаре:", len(car_brands_models))
+        for k in sorted(car_brands_models):
+            print(k, "→", car_brands_models[k])
+        return
+
+    if "streamlit" in sys.argv[0] or (st is not None and args.input is None and args.column is None):
         run_streamlit_app()
-    else:
-        # CLI режим
-        import argparse
-        parser = argparse.ArgumentParser(description="Автообработка")
-        parser.add_argument("--input", "-i", help="Входной файл CSV/XLSX")
-        parser.add_argument("--column", "-c", help="Имя столбца")
-        parser.add_argument("--external", "-e", help="URL внешних данных")
-        parser.add_argument("--output", "-o", help="Путь для сохранения")
-        parser.add_argument("--list", action="store_true", help="Показать список словаря")
-        parser.add_argument("--dict", "-d", help="Файл или URL словаря")
-        args = parser.parse_args()
+        return
 
-        if args.list:
-            print("Всего ключей в словаре:", len(car_brands_models))
-            for k in sorted(car_brands_models):
-                print(k, "→", car_brands_models[k])
-            return
+    if not args.input or not args.column:
+        print("Укажите --input и --column, или --list")
+        return
 
-        if not args.input or not args.column:
-            print("Укажите --input и --column, или --list")
-            return
-
-        # Чтение файла
-        try:
-            if args.input.lower().endswith(('.xls', '.xlsx')):
-                df = pd.read_excel(args.input)
-            else:
-                df = pd.read_csv(args.input, encoding=CSV_ENCODING)
-        except Exception as e:
-            print("Ошибка чтения файла:", e)
-            return
-
-        if args.column not in df.columns:
-            print("Столбец не найден:", args.column)
-            return
-
-        # Загрузка словаря
-        if args.dict:
-            loaded = load_dictionary(source=args.dict)
-            if loaded:
-                for k, v in loaded.items():
-                    car_brands_models[k] = v
-                added_pairs.update(loaded)
-                # Обновляем структуру
-                final_struct = build_final_struct(car_brands_models, added_pairs)
+    try:
+        if args.input.lower().endswith(('.xls', '.xlsx')):
+            df = pd.read_excel(args.input)
         else:
-            final_struct = build_final_struct(car_brands_models, added_pairs)
+            df = pd.read_csv(args.input, encoding=CSV_ENCODING)
+    except Exception as e:
+        print("Ошибка чтения файла:", e)
+        return
 
-        pattern = final_struct.get("pattern")
-        mapping = final_struct.get("map", {})
+    if args.column not in df.columns:
+        print("Столбец не найден:", args.column)
+        return
 
-        # Подготовка данных
-        series = df[args.column]
-        dataset_words = extract_words_from_series(series)
-        external_words = extract_words_from_series(pd.Series())  # пустой, т.к. не грузим внешние
-        if args.external:
-            ext_df = load_external_data(args.external)
-            external_words = extract_words_from_series(ext_df.stack())
-
-        base_keys = set(car_brands_models.keys())
-        candidates = (dataset_words | external_words) - base_keys
-
-        # Автоматическое добавление
-        additions = prepare_additions_fast(base_keys, candidates, threshold=0.85)
-        if additions:
-            for k, v in additions.items():
+    if args.dict:
+        loaded = load_dictionary(source=args.dict)
+        if loaded:
+            for k, v in loaded.items():
                 car_brands_models[k] = v
-            added_pairs.update(additions)
-            save_additions()
-            # Обновляем структуру
-            final_struct = build_final_struct(car_brands_models, added_pairs)
-            pattern = final_struct.get("pattern")
-            mapping = final_struct.get("map", {})
+            added_pairs.update(loaded)
 
-        # Обработка данных
-        df["Исходное"] = df[args.column]
-        df["Обработанное"] = df[args.column].astype(str).apply(
-            lambda v: process_text_fast(v, final_struct, pattern, mapping, translit_allowed=True)
-        )
+    # Построение структуры поиска
+    global search_struct
+    search_struct = build_final_struct_fast(car_brands_models, added_pairs)
 
-        # Сохраняем результат
-        output_path = args.output or ("result.xlsx" if args.input.lower().endswith(('.xls', '.xlsx')) else "result.csv")
-        try:
-            if output_path.lower().endswith(('.xls', '.xlsx')):
-                df.to_excel(output_path, index=False)
-            else:
-                df.to_csv(output_path, index=False, encoding=CSV_ENCODING)
-            print("Результат сохранен:", output_path)
-        except Exception as e:
-            print("Ошибка при сохранении:", e)
+    # Обработка
+    series = df[args.column]
+    dataset_words = extract_words_from_series(series)
+    external_words = set()
+    if args.external:
+        ext_df = load_external_data(args.external)
+        external_words = extract_words_from_series(ext_df.stack())
+
+    base_keys = set(car_brands_models.keys())
+    candidates = (dataset_words | external_words) - base_keys
+    additions = prepare_additions_fast(base_keys, candidates, threshold=0.85)
+    if additions:
+        for k, v in additions.items():
+            car_brands_models[k] = v
+        added_pairs.update(additions)
+        save_additions()
+        search_struct = build_final_struct_fast(car_brands_models, added_pairs)
+
+    df["Исходное"] = df[args.column]
+    df["Обработанное"] = df[args.column].astype(str).apply(lambda v: process_text_fast_optimized(v, search_struct, translit_allowed=True))
+
+    output_path = args.output or ("result.xlsx" if args.input.lower().endswith(('.xls', '.xlsx')) else "result.csv")
+    try:
+        if output_path.lower().endswith(('.xls', '.xlsx')):
+            df.to_excel(output_path, index=False)
+        else:
+            df.to_csv(output_path, index=False, encoding=CSV_ENCODING)
+        print("Результат сохранен:", output_path)
+    except Exception as e:
+        print("Ошибка при сохранении:", e)
 
 if __name__ == "__main__":
     main()
