@@ -13,7 +13,9 @@ import pandas as pd
 from difflib import SequenceMatcher
 from functools import lru_cache
 from typing import Optional, Dict, Set, List, Tuple, Any
+
 import concurrent.futures
+from typing import Callable, Iterable, List, Any
 
 try:
     import streamlit as st  # type: ignore
@@ -1083,6 +1085,53 @@ def prepare_additions_fast(base_keys: set, candidates: set, threshold: float = 0
     return additions
 
 # ==========================
+# ВАЖНО: добавьте сюда функции из второго файла (safe_thread_map, process_single_value, process_dataframe_column)
+
+def safe_thread_map(func: Callable[[Any], Any], data: Iterable, requested_workers: int | None = None) -> List:
+    """
+    ThreadPoolExecutor map с fallback на последовательную обработку в случае ошибок запуска потоков.
+    """
+    seq = list(data)
+    if not seq:
+        return []
+    max_workers_env = os.cpu_count() or 1
+    if requested_workers is None:
+        requested_workers = min(8, max_workers_env)
+    workers = max(1, min(requested_workers, max_workers_env, len(seq)))
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+            return list(ex.map(func, seq))
+    except RuntimeError as e:
+        print("ThreadPoolExecutor не удалось запустить, fallback на последовательную обработку:", e)
+        return [func(x) for x in seq]
+    except Exception as e:
+        print("Обработка с помощью потоков не удалась, fallback на последовательную. Ошибка:", e)
+        return [func(x) for x in seq]
+
+def process_single_value(value: str, translit: bool = True) -> str:
+    """
+    Обёртка для обработки одного значения.
+    Использует глобальную переменную search_struct и функцию process_text_fast_optimized.
+    """
+    global search_struct
+    try:
+        if search_struct is None:
+            update_search_struct()
+        return process_text_fast_optimized(value, search_struct, translit_allowed=translit)
+    except Exception:
+        return value
+
+def process_dataframe_column(df: "pd.DataFrame", col: str, translit_allowed: bool = True,
+                             requested_workers: int | None = None) -> List[str]:
+    """
+    Обработка столбца DataFrame через safe_thread_map.
+    Возвращает список обработанных строк.
+    """
+    data_list = df[col].astype(str).tolist()
+    fn = lambda v: process_single_value(v, translit_allowed)
+    return safe_thread_map(fn, data_list, requested_workers=requested_workers or (os.cpu_count() or 1))
+
+# ==========================
 # Основная UI функция
 def run_streamlit_app() -> None:
     global search_struct
@@ -1179,9 +1228,8 @@ def run_streamlit_app() -> None:
             save_additions()
             update_search_struct()
 
-        # Обработка строки параллельно
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            processed_values = list(executor.map(process_single_value, df[col].astype(str)))
+        # Обработка строки через safe_thread_map
+        processed_values = process_dataframe_column(df, col, translit_allowed=translit_allowed)
         df["Обработанное"] = processed_values
 
         def highlight_using_matches(text: str, matches: List[Tuple[int,int,str,str]]) -> str:
