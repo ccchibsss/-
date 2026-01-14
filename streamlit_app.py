@@ -463,92 +463,98 @@ def run_streamlit_app() -> None:
             csv_bytes = df.to_csv(index=False, encoding=CSV_ENCODING).encode(CSV_ENCODING)
             st.download_button("Скачать CSV", csv_bytes, file_name="result.csv", mime="text/csv")
 
+# --- Основная точка входа ---
+
 def main():
-    if st:
+    import sys
+    if "streamlit" in sys.argv[0]:
+        # Запускаем через streamlit
         run_streamlit_app()
-        return
-    # CLI-режим, если streamlit не установлен
-    import argparse
-    parser = argparse.ArgumentParser(description="Автообработка")
-    parser.add_argument("--input", "-i", help="Входной файл CSV/XLSX")
-    parser.add_argument("--column", "-c", help="Имя столбца")
-    parser.add_argument("--external", "-e", help="URL внешних данных")
-    parser.add_argument("--output", "-o", help="Путь для сохранения")
-    parser.add_argument("--list", action="store_true", help="Показать список словаря")
-    parser.add_argument("--dict", "-d", help="Файл или URL словаря")
-    args = parser.parse_args()
+    else:
+        # CLI режим
+        # вставьте сюда ваш существующий CLI код (или вызов)
+        # например:
+        import argparse
+        parser = argparse.ArgumentParser(description="Автообработка")
+        parser.add_argument("--input", "-i", help="Входной файл CSV/XLSX")
+        parser.add_argument("--column", "-c", help="Имя столбца")
+        parser.add_argument("--external", "-e", help="URL внешних данных")
+        parser.add_argument("--output", "-o", help="Путь для сохранения")
+        parser.add_argument("--list", action="store_true", help="Показать список словаря")
+        parser.add_argument("--dict", "-d", help="Файл или URL словаря")
+        args = parser.parse_args()
 
-    if args.list:
-        print("Всего ключей в словаре:", len(car_brands_models))
-        for k in sorted(car_brands_models):
-            print(k, "→", car_brands_models[k])
-        return
+        if args.list:
+            print("Всего ключей в словаре:", len(car_brands_models))
+            for k in sorted(car_brands_models):
+                print(k, "→", car_brands_models[k])
+            return
 
-    if not args.input or not args.column:
-        print("Укажите --input и --column, или --list")
-        return
-    
-    # Чтение файла
-    try:
-        if args.input.lower().endswith(('.xls', '.xlsx')):
-            df = pd.read_excel(args.input)
-        else:
-            df = pd.read_csv(args.input, encoding=CSV_ENCODING)
-    except Exception as e:
-        print("Ошибка чтения файла:", e)
-        return
+        if not args.input or not args.column:
+            print("Укажите --input и --column, или --list")
+            return
+        
+        # Чтение файла
+        try:
+            if args.input.lower().endswith(('.xls', '.xlsx')):
+                df = pd.read_excel(args.input)
+            else:
+                df = pd.read_csv(args.input, encoding=CSV_ENCODING)
+        except Exception as e:
+            print("Ошибка чтения файла:", e)
+            return
 
-    if args.column not in df.columns:
-        print("Столбец не найден:", args.column)
-        return
+        if args.column not in df.columns:
+            print("Столбец не найден:", args.column)
+            return
 
-    # Загрузка словаря
-    if args.dict:
-        loaded = load_dictionary(source=args.dict)
-        if loaded:
-            for k, v in loaded.items():
-                car_brands_models[k] = v
-            added_pairs.update(loaded)
-            save_additions()
+        # Загрузка словаря
+        if args.dict:
+            loaded = load_dictionary(source=args.dict)
+            if loaded:
+                for k, v in loaded.items():
+                    car_brands_models[k] = v
+                added_pairs.update(loaded)
+                save_additions()
 
-    # Внешние данные
-    ext_df = load_external_data(args.external) if args.external else pd.DataFrame()
+        # Внешние данные
+        ext_df = load_external_data(args.external) if args.external else pd.DataFrame()
 
-    # Подготовка данных
-    series = df[args.column]
-    dataset_words = extract_words_from_series(series)
-    external_words = extract_words_from_series(ext_df.stack()) if not ext_df.empty else set()
-    base_keys = set(car_brands_models.keys())
-    candidates = (dataset_words | external_words) - base_keys
+        # Подготовка данных
+        series = df[args.column]
+        dataset_words = extract_words_from_series(series)
+        external_words = extract_words_from_series(ext_df.stack()) if not ext_df.empty else set()
+        base_keys = set(car_brands_models.keys())
+        candidates = (dataset_words | external_words) - base_keys
 
-    # Автоматическое добавление
-    additions = prepare_additions_fast(base_keys, candidates, threshold=0.85)
-    for k, v in additions.items():
-        car_brands_models[k] = v
-    added_pairs.update(additions)
-    save_additions()
+        # Автоматическое добавление
+        additions = prepare_additions_fast(base_keys, candidates, threshold=0.85)
+        for k, v in additions.items():
+            car_brands_models[k] = v
+        added_pairs.update(additions)
+        save_additions()
 
-    # Создаем структуру
-    final_struct = build_final_struct(car_brands_models, additions)
-    pattern = final_struct.get("pattern")
-    mapping = final_struct.get("map", {})
+        # Создаем структуру
+        final_struct = build_final_struct(car_brands_models, additions)
+        pattern = final_struct.get("pattern")
+        mapping = final_struct.get("map", {})
 
-    # Обработка данных
-    df["Исходное"] = df[args.column]
-    df["Обработанное"] = df[args.column].astype(str).apply(
-        lambda v: process_text_fast(v, final_struct, translit_allowed=True)
-    )
+        # Обработка данных
+        df["Исходное"] = df[args.column]
+        df["Обработанное"] = df[args.column].astype(str).apply(
+            lambda v: process_text_fast(v, final_struct, translit_allowed=True)
+        )
 
-    # Сохранение результата
-    output_path = args.output or ("result.xlsx" if args.input.lower().endswith(('.xls', '.xlsx')) else "result.csv")
-    try:
-        if output_path.lower().endswith(('.xls', '.xlsx')):
-            df.to_excel(output_path, index=False)
-        else:
-            df.to_csv(output_path, index=False, encoding=CSV_ENCODING)
-        print("Результат сохранен:", output_path)
-    except Exception as e:
-        print("Ошибка при сохранении:", e)
+        # Сохранение результата
+        output_path = args.output or ("result.xlsx" if args.input.lower().endswith(('.xls', '.xlsx')) else "result.csv")
+        try:
+            if output_path.lower().endswith(('.xls', '.xlsx')):
+                df.to_excel(output_path, index=False)
+            else:
+                df.to_csv(output_path, index=False, encoding=CSV_ENCODING)
+            print("Результат сохранен:", output_path)
+        except Exception as e:
+            print("Ошибка при сохранении:", e)
 
 if __name__ == "__main__":
     main()
