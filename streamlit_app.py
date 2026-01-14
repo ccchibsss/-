@@ -95,7 +95,7 @@ def save_dictionary_to_file(dictionary: Dict[str, str], filename: str = ADDITION
     except Exception as e:
         st.exception(f"Ошибка при сохранении файла: {e}")
 
-# --- Вспомогательная функция для обновления словаря из файла и автоматического сохранения ---
+# --- Вспомогательная функция для обновления словаря из файла ---
 def update_dict_from_uploaded_file(uploaded_file):
     try:
         dict_bytes = uploaded_file.read()
@@ -257,7 +257,14 @@ def run():
         except Exception as e:
             st.error(f"Ошибка при обработке файла: {e}")
 
-# --- Обработка файла для поиска и подсветки ---
+# --- Вспомогательные функции для подсветки и обработки ---
+def process_text(text: str, struct: Dict[str, Any]) -> Tuple[str, str]:
+    if not text:
+        return text, ""
+    matches = get_matches(text, struct)
+    html_result = highlight_html(text, matches)
+    return text, html_result
+
 def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, struct: Dict[str, Any]) -> pd.DataFrame:
     ext = os.path.splitext(filename)[1].lower()
     if ext == ".csv":
@@ -281,7 +288,6 @@ def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str,
     df[f"{col_name}_preview_html"] = html_list
     return df
 
-# --- Вспомогательные функции для подсветки ---
 import html
 
 def get_matches(text: str, struct: Dict[str, Any]) -> List[Tuple[int, int, str, str]]:
@@ -337,16 +343,7 @@ def highlight_html(text: str, matches: List[Tuple[int, int, str, str]]) -> str:
 def escape_html(s: str) -> str:
     return html.escape(s)
 
-def process_text(text: str, struct: Dict[str, Any]) -> Tuple[str, str]:
-    if not text:
-        return text, ""
-    matches = get_matches(text, struct)
-    html_result = highlight_html(text, matches)
-    return text, html_result
-
-# --- Стиль подсветки ---
 HIGHLIGHT_STYLE = "background: #ffeb3b; color: #000; padding: 0 2px; border-radius: 2px;"
-
 
 if __name__ == "__main__":
     run()
