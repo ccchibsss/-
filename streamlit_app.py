@@ -278,24 +278,42 @@ def run():
         unsafe_allow_html=True,
     )
 
+    # Инструкция по формату файла
+    st.info("Поддерживаются файлы: JSON, CSV, XLSX. В файле должны быть минимум 2 столбца: латиница и кириллица. Например:\n\n" +
+            "- JSON: {\"A\":\"А\", \"B\":\"Б\"}\n" +
+            "- CSV: латиница,кириллица\n" +
+            "- XLSX: первый столбец - латиница, второй - кириллица")
+
     # Загрузка словаря из файла (JSON, CSV, XLSX)
     uploaded_dict_file = st.file_uploader("Загрузить файл словаря (JSON, CSV или XLSX)", type=["json", "csv", "xlsx"])
     if uploaded_dict_file:
         try:
             dict_bytes = uploaded_dict_file.read()
-            if uploaded_dict_file.name.lower().endswith(".json"):
-                loaded_dict = json.loads(dict_bytes.decode("utf-8"))
-            elif uploaded_dict_file.name.lower().endswith(".csv"):
+            filename_lower = uploaded_dict_file.name.lower()
+            loaded_dict = {}
+            if filename_lower.endswith(".json"):
+                obj = json.loads(dict_bytes.decode("utf-8"))
+                if isinstance(obj, dict):
+                    loaded_dict = {str(k): str(v) for k, v in obj.items()}
+            elif filename_lower.endswith(".csv"):
                 df_dict = pd.read_csv(io.StringIO(dict_bytes.decode("utf-8")))
-                loaded_dict = {str(k): str(v) for k, v in zip(df_dict.iloc[:,0], df_dict.iloc[:,1])}
-            elif uploaded_dict_file.name.lower().endswith(".xlsx"):
+                if len(df_dict.columns) >= 2:
+                    loaded_dict = {str(k): str(v) for k, v in zip(df_dict.iloc[:,0], df_dict.iloc[:,1])}
+                else:
+                    st.error("CSV файл должен содержать минимум 2 столбца.")
+            elif filename_lower.endswith(".xlsx"):
                 df_dict = pd.read_excel(io.BytesIO(dict_bytes), engine='openpyxl')
-                loaded_dict = {str(k): str(v) for k, v in zip(df_dict.iloc[:,0], df_dict.iloc[:,1])}
+                if len(df_dict.columns) >= 2:
+                    loaded_dict = {str(k): str(v) for k, v in zip(df_dict.iloc[:,0], df_dict.iloc[:,1])}
+                else:
+                    st.error("Excel файл должен содержать минимум 2 столбца.")
             else:
-                loaded_dict = {}
+                st.error("Некорректный тип файла.")
             if loaded_dict:
                 latin_to_cyr.update({k:v for k,v in loaded_dict.items()})
                 st.success("Словарь обновлён из файла.")
+            else:
+                st.warning("Файл пуст или формат файла некорректен.")
         except Exception as e:
             st.error(f"Ошибка при загрузке словаря: {e}")
 
@@ -360,7 +378,7 @@ def run():
         try:
             file_bytes = uploaded_file.read()
             ext = os.path.splitext(uploaded_file.name)[1].lower()
-            # Предварительно читаем файл, чтобы получить список колонок
+            # Предварительный просмотр колонок
             if ext in ['.xlsx', '.xls']:
                 df_preview = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl', nrows=0)
             elif ext == '.csv':
