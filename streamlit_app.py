@@ -29,745 +29,14 @@ ADDITIONS_FILE = "additional_brands.json"
 
 # --- Весь ваш словарь car_brands_models (обязательно вставьте полностью) ---
 car_brands_models = {
-    # Тут вставьте весь ваш словарь из вопроса. Ниже пример части, вставьте полностью.
+    # Вставьте весь ваш словарь здесь (приведен пример)
     "Acura": "Акура",
-"Integra": "Интегра",
-"MDX": "МДХ",
-"RDX": "РДХ",
-"RSX": "РСХ",
-"TLX": "ТЛКС",
-
-# Alfa Romeo
-"4C": "4C",
-"Alfa Romeo": "Альфа Ромео",
-"Giulia": "Джулия",
-"Stelvio": "Стельвио",
-"Tonale": "Тонале",
-
-# Audi
-"A1": "А1",
-"A3": "А3",
-"A4": "А4",
-"A5": "А 5",
-"A6": "А6",
-"A7": "А 7",
-"A8": "А8",
-"Audi": "Ауди",
-"e-tron": "Е-Трон",
-"e-tron GT": "Етрэн ГТ",
-"Q3": "Кью 3",
-"Q4 e-tron": "Кью 4 Етрэн",
-"Q5": "Кью 5",
-"Q7": "Кью 7",
-"Q8": "Кью 8",
-"R8": "R8",
-"RS Q3": "RS Кью 3",
-"RS3": "РС 3",
-"RS5": "РС 5",
-"RS7": "РС 7",
-"SQ5": "СКу 5",
-"SQ7": "СКу 7",
-"TT": "ТТ",
-
-# Aurus
-"Aurus": "Аурус",
-"Aurus Komendant": "Аурус Командант",
-"Aurus Senat": "Аурус Сенат",
-
-# Baojun
-"Baojun": "Баоцзюнь",
-"Baojun 510": "Баоцзюнь 510",
-"Baojun 530": "Баоцзюнь 530",
-"Baojun RC-6": "Баоцзюнь RC-6",
-
-# BMW
-"1 Series": "1 Серия",
-"2 Series": "2 Серия",
-"3 Series": "3 Серия",
-"4 Series": "4 Серия",
-"5 Series": "5 Серия",
-"6 Series": "6 Серия",
-"7 Series": "7 Серия",
-"8 Series": "8 Серия",
-"BMW": "БМВ",
-"M2": "Эм 2",
-"M3": "Эм 3",
-"M4": "Эм 4",
-"M5": "Эм 5",
-"X1": "Икс 1",
-"X2": "Икс 2",
-"X3": "Икс 3",
-"X4": "Икс 4",
-"X5": "Икс 5",
-"X6": "Икс 6",
-"X7": "Икс 7",
-"Z4": "Зет 4",
-
-# BYD
-"BYD Atto 3": "Атто 3",
-"BYD Dolphin": "Байджи Дельфин",
-"BYD Han": "Байджи Хан",
-"BYD Qin": "Байджи Цин",
-"BYD Seal": "Байджи Сил",
-"BYD Song": "Байджи Сонг",
-"BYD Tang": "Байджи Танг",
-"BYD Tang EV": "Танг ЕВ",
-"BYD Yuan": "Байджи Юань",
-"BYD Yuan EV": "Байджи Юань ЕВ",
-
-# Cadillac
-"Cadillac": "Кадиллак",
-"Escalade": "Эскадил",
-
-# Chery
-"Chery": "Черри",
-"Chery Arrizo 5": "Черри Аризо 5",
-"Chery QQ": "Черри QQ",
-"Chery Tiggo 2": "Черри Тигго 2",
-"Chery Tiggo 3": "Черри Тигго 3",
-"Chery Tiggo 7": "Черри Тигго 7",
-"Chery Tiggo 8": "Черри Тигго 8",
-
-# Chevrolet
-"Bolt EV": "Болт ЕВ",
-"Chevrolet": "Шевроле",
-"Chevrolet Express": "Экспресс",
-"Aveo": "Авео",
-"Blazer": "Блейзер",
-"Cruz": "Круз",
-"Equinox": "Экуинокс",
-"Lacetti": "Лачетти",
-"Malibu": "Мальбу",
-"Silverado": "Сильверадо",
-"Spark": "Спарк",
-"Tahoe": "Тахо",
-"Traverse": "Трэверс",
-
-# Dodge
-"Challenger": "Челленджер",
-"Charger": "Чарджер",
-"Dodge": "Додж",
-
-# EVolution
-"EVolution": "Эволюция",
-
-# FAW
-"FAW": "Фав",
-
-# Ferrari
-"296 GTB": "296 GTB",
-"488": "488",
-"F8 Tributo": "F8 Трибуто",
-"Ferrari": "Феррари",
-"Roma": "Рома",
-"SF90": "SF90",
-
-# Fiat
-"500": "500",
-"Doblo": "Добло",
-"Ducato": "Дукато",
-"Ducato Maxi": "Дукато Макси",
-"Fiat": "Фиат",
-"Fiat Ducato Maxi": "Дукато Макси",
-"Fiat Professional": "Фиат Профешионал",
-"Fiorino": "Фиорино",
-"Panda": "Панда",
-"Talento": "Таленто",
-"Tipo": "Типо",
-
-# Ford
-"Bronco": "Бронко",
-"e-Transit": "е-Транзит",
-"Ford": "Форд",
-"Ford Courier": "Форд Курьер",
-"Ford Galaxy": "Форд Гэлакси",
-"Ford Transit Van": "Транзит Фургон",
-"Mustang": "Мустанг",
-"Ranger": "Рейнджер",
-"Transit": "Транзит",
-"Transit Connect": "Транзит Коннект",
-"Transit Custom": "Транзит Кастом",
-
-# GAZ
-"GAZ": "Газ",
-"GAZ Volga": "Волга",
-"GAZ Sadko": "Садко",
-"Gazel": "ГАЗель",
-"Gazel Business": "ГАЗель Бизнес",
-"Gazon Next": "Газон Некст",
-"GAZelle": "ГАЗель",
-"GAZelle Next": "ГАЗель Некст",
-"Sobol": "Соболь",
-"Sobol 4x4": "Соболь 4х4",
-
-# Geely
-"Atlas": "Атлас",
-"Binrui": "Бинрай",
-"Coolray": "Кулрэй",
-"Emgrand": "Эмгранд",
-"Geely": "Джили",
-"Geely Atlas": "Джили Атлас",
-"Geely Atlas Pro": "Джили Атлас Про",
-"Geely Binrui": "Джили Бинрай",
-"Geely Coolray": "Джили Кулрэй",
-"Geely Emgrand": "Джили Эмгранд",
-"Geely Geometry": "Джили Геометрия",
-"Geely Preface": "Джили Префейс",
-"Tiggo": "Тигго",
-"Tiggo 7": "Тигго 7",
-
-# GMC
-"GMC": "ДжиЭмСи",
-"Sierra": "Сиерра",
-
-# Great Wall
-"Great Wall": "Грейт Уолл",
-
-# Haval
-"Haval": "Хавал",
-"Haval F7": "Хавал F7",
-"Haval H2": "Хавал H2",
-"Haval H5": "Хавал H5",
-"Haval H6": "Хавал H6",
-"Haval H9": "Хавал Н9",
-"Haval Jolion": "Хавал Джолион",
-
-# Honda
-"Accord": "Акорд",
-"Civic": "Сивик",
-"CR-V": "КР-В",
-"Fit": "Фит",
-"HR-V": "ХР-В",
-"Honda": "Хонда",
-"Jazz": "Джаз",
-"NSX": "НСХ",
-"Odyssey": "Одиссей",
-"Pilot": "Пилот",
-"Ridgeline": "Риджлайн",
-
-# Hongqi
-"Hongqi": "Хунци",
-
-# Hyundai
-"Elantra": "Элантра",
-"Hyundai": "Хёндай",
-"Hyundai Ioniq": "Ионик",
-"Hyundai Santa Cruz": "Санта Крус",
-"i20": "i20",
-"i30": "i30",
-"i4": "i4",
-"iX": "iX",
-"Ioniq 5": "Ионик 5",
-"Ioniq 6": "Ионик 6",
-"Kona": "Кона",
-"Kona Electric": "Кона Электрик",
-"Palisade": "Палисад",
-"Santa Fe": "Санта Фе",
-"Sonata": "Соната",
-"Tucson": "Тусон",
-
-# Isuzu
-"D-Max": "Ди-Макс",
-"Isuzu": "Исузу",
-"Isuzu N-Series": "Исузу N-Серия",
-
-# JAC
-"JAC": "Джак",
-"JAC Refine S4": "Джак Рефайн S4",
-"JAC S2": "Джак S2",
-"JAC iEV": "Джак iEV",
-"Refine": "Рефайн",
-
-# Jaguar
-"Jaguar": "Ягуар",
-
-# Jeep
-"Grand Cherokee": "Гранд Чероки",
-"Jeep": "Джип",
-"Wrangler": "Рэнглер",
-
-# KAMAZ
-"KAMAZ": "КамАЗ",
-"KAMAZ Electric": "КамАЗ электромобиль",
-"KAMAZ Trucks": "КамАЗ грузовики",
-
-# Kia
-"Carnival": "Карнавал",
-"Ceed": "Сид",
-"Kia": "Киа",
-"Kia EV6": "Киа EV6",
-"Kia EV9": "Киа EV9",
-"Kia Seltos": "Селтос",
-"Kia Stonic": "Стонік",
-"Optima": "Оптима",
-"Rio": "Рио",
-"Sorento": "Соренто",
-"Soul": "Соул",
-"Sportage": "Спортейдж",
-"Stinger": "Стингер",
-
-# Lada
-"4x4": "Нива 4x4",
-"Granta": "Гранта",
-"Kalina": "Калина",
-"Lada": "Лада",
-"Lada 4x4": "Лада 4х4",
-"Lada 4x4 Urban": "Лада 4x4 Урбан",
-"Lada Granta Cross": "Лада Гранта Кросс",
-"Lada Granta Liftback": "Лада Гранта хэтчбек",
-"Lada Granta Sedan": "Лада Гранта седан",
-"Lada Largus Cross": "Лада Ларгус Кросс",
-"Lada Niva Travel": "Лада Нива Тревел",
-"Lada Priora": "Лада Приора",
-"Lada Samara": "Лада Самара",
-"Lada Vesta Cross": "Лада Веста Кросс",
-"Lada Vesta Sport": "Лада Веста Спорт",
-"Lada Vesta SW": "Лада Веста Универсал",
-"Lada XRAY Cross": "Лада ХРей Кросс",
-"Lada XRay": "Лада Xray",
-"Largus": "Ларгус",
-"Niva": "Нива",
-"Vesta": "Веста",
-
-# Lamborghini
-"Aventador": "Авендадор",
-"Huracan": "Уракан",
-"Lamborghini": "Ламборгини",
-"Sián": "Сиан",
-"Urus": "Урус",
-
-# Lancia
-"Lancia": "Ланча",
-
-# Land Rover
-"Discovery": "Дискавери",
-"Land Rover": "Ленд Ровер",
-"Range Rover": "Рендж Ровер",
-
-# Levdeo
-"Levdeo": "Левдео",
-
-# Lifan
-"F3": "Ф3",
-"F7": "Ф7",
-"Lifan": "Лифан",
-"Lifan 820": "Лифан 820",
-"Lifan KPR": "Лифан КРП",
-"Lifan Myway": "Лифан Майвэй",
-"Lifan Solano": "Лифан Солано",
-"Lifan X60": "Лифан X60",
-
-# Lucid
-"Air": "Эйр",
-"Lucid": "Лусид",
-
-# Lynk & Co
-"Lynk & Co": "Линк & Ко",
-"Lynk & Co 01": "Линк & Ко 01",
-"Lynk & Co 03": "Линк & Ко 03",
-"Lynk & Co 05": "Линк & Ко 05",
-
-# Maserati
-"Ghibli": "Гибли",
-"GranTurismo": "Гран Туризмо",
-"Levante": "Леванте",
-"MC20": "MC20",
-"Maserati": "Мазерати",
-"Quattroporte": "Кваттропорте",
-
-# Mazda
-"BT-50": "БТ-50",
-"CX-3": "Кс 3",
-"CX-5": "Кс 5",
-"CX-9": "Кс 9",
-"Mazda": "Мазда",
-"Mazda CX-30": "Мазда CX-30",
-"Mazda CX-5": "Мазда CX-5",
-"Mazda MX-30": "Мазда MX-30",
-"Mazda2": "Мазда 2",
-"Mazda3": "Мазда 3",
-"Mazda6": "Мазда 6",
-"MX-30": "Мазда MX-30",
-"MX-5": "МХ 5",
-"RX-8": "РХ 8",
-
-# Mercedes-Benz
-"A-Class": "А-Класс",
-"AMG GT": "АМГ ГТ",
-"B-Class": "Б-Класс",
-"C-Class": "С-Класс",
-"CLA": "CLA",
-"CLS": "ЦЛС",
-"Citan": "Ситан",
-"E-Class": "Е-Класс",
-"EQC": "ЭКВЦ",
-"G-Class": "Г-Класс",
-"GLA": "GLA",
-"GLC": "ГЛЦ",
-"GLE": "ГЛЕ",
-"GLE Coupe": "ГЛЕ Купе",
-"GLS": "ГЛС",
-"Mercedes": "Мерседес",
-"Mercedes-Benz": "Мерседес-Бенц",
-"S-Class": "Си-Класс",
-"SL-Class": "СЛ-Класс",
-"Sprinter": "Спринтер",
-"V-Class": "В-Класс",
-"Vito": "Вито",
-"eVito": "еВито",
-"eVito Tourer": "еВито Турайер",
-
-# Maybach
-"Maybach": "Майбах",
-
-# MG
-"MG": "МГ",
-
-# Mini
-"Cooper": "Купер",
-"Mini": "Мини",
-"Mini Cooper": "Мини Купер",
-
-# Mitsubishi
-"ASX": "АСХ",
-"Delica": "Делика",
-"Eclipse": "Иклипс",
-"Eclipse Cross": "Иклепс Кросс",
-"Galant": "Галант",
-"L200": "L200",
-"Lancer": "Лансер",
-"Mitsubishi": "Мицубиси",
-"Mitsubishi L300": "Л300",
-"Outlander": "Аутлендер",
-"Pajero": "Паджеро",
-
-# Moskvitch
-"Moskvitch": "Москвич",
-"Moskvitch 3": "Москвич 3",
-"Moskvitch 403": "Москвич 403",
-"Moskvitch 412": "Москвич 412",
-"Moskvitch Aleko": "Москвич Алеко",
-"Moskvitch EV": "Москвич электромобиль",
-
-# Neta
-"Neta": "Нета",
-
-# NIO
-"EC6": "Нио EC6",
-"ES6": "Нио ES6",
-"ES7": "ES7",
-"ES8": "Нио ES8",
-"ET7": "Нио ET7",
-"NIO": "Нио",
-"NIO EC6": "Нио EC6",
-"NIO ES6": "Нио ES6",
-"NIO ES8": "Нио ES8",
-"NIO ET7": "Нио ET7",
-
-# Nissan
-"370Z": "370З",
-"Altima": "Альтима",
-"Avalon": "Эвалон",
-"e-NV200": "е-НВ200",
-"GT-R": "ГТ-Р",
-"Juke": "Джук",
-"Leaf": "Лиф",
-"Maxima": "Максима",
-"Murano": "Муранo",
-"Navara": "Навара",
-"Nissan": "Ниссан",
-"Nissan NV200": "НВ200",
-"Nissan Patrol Y62": "Патрол Y62",
-"NV300": "НВ300",
-"NV400": "НВ400",
-"Pathfinder": "Патфайндер",
-"Patrol": "Патрол",
-"Qashqai": "Кашкай",
-"Rogue": "Роудж",
-"Sentra": "Сентра",
-"Tacoma": "Такома",
-"Titan": "Титан",
-"Tundra": "Тундра",
-"Venza": "Венза",
-"X-Trail": "Икс-Трэйл",
-
-# Opel
-"Astra": "Астра",
-"Combo": "Комбо",
-"Corsa": "Корса",
-"Crossland": "Кроссленд",
-"Grandland": "Грандленд",
-"Insignia": "Инсигния",
-"Mokka": "Мокка",
-"Opel": "Опель",
-
-# Ora
-"Ora": "Ора",
-
-# Peugeot
-"208": "208",
-"3008": "3008",
-"308": "308",
-"5008": "5008",
-"508": "508",
-"Boxer": "Боксер",
-"Partner": "Партнёр",
-"Peugeot": "Пежо",
-"Peugeot Boxer": "Пежо Боксер",
-"Peugeot Partner": "Пежо Партнёр",
-"Rifter": "Рифтер",
-"Traveller": "Травеллер",
-
-# Polestar
-"Polestar": "Полистар",
-"Polestar 2": "Полистар 2",
-"Polestar 3": "Полистар 3",
-
-# Porsche
-"911": "911",
-"Cayman": "Кайман",
-"Macan": "Макан",
-"Porsche": "Порше",
-"Taycan": "Тайкан",
-
-# Renault
-"Captur": "Каптюр",
-"Clio": "Клио",
-"Duster": "Дастер",
-"Kangoo": "Кангру",
-"Kangoo Express": "Кангру Экспресс",
-"Kangoo Van": "Кангру Ван",
-"Kangoo ZE": "Кангру ЗЕ",
-"Koleos": "Колеос",
-"Logan": "Логан",
-"Master": "Мастер",
-"Megane": "Меган",
-"Renault": "Рено",
-"Renault Kangoo Express": "Кангру Экспресс",
-"Renault Master": "Мастер",
-"Renault Master Van": "Мастер Фургон",
-"Renault Trafic Passenger": "Трафик Пассенджер",
-"Sandero": "Сандеро",
-"Trafic": "Трафик",
-
-# Rivian
-"R1T": "R1T",
-"Rivian": "Ривиан",
-
-# Roewe
-"Roewe": "Роу",
-
-# Rostec Electric
-"Rostec Electric": "Ростех электромобиль",
-
-# SAIC
-"SAIC": "САЙК",
-
-# Seat
-"Cupra": "Купра",
-"Seat": "Сеат",
-
-# Skoda
-"Fabia": "Фабия",
-"Karoq": "Кароак",
-"Kodiaq": "Кодьяк",
-"Octavia": "Октавия",
-"Skoda": "Шкода",
-"Skoda Enyaq": "Еняк",
-"Superb": "Суперб",
-"Yeti": "Йети",
-
-# Smart
-"Smart": "Смарт",
-"Smart ForTwo": "Смарт Фор Ту",
-
-# Subaru
-"Ascent": "Асцент",
-"BRZ": "BRZ",
-"Crosstrek": "Кросстрек",
-"Forester": "Форестер",
-"Impreza": "Импреза",
-"Legacy": "Легаси",
-"Outback": "Аутбек",
-"Subaru": "Субару",
-"WRX": "ВРХ",
-"XV": "Икс ВИ",
-
-# Suzuki
-"Ciaz": "Циаз",
-"Ignis": "Игнис",
-"Jimny": "Джимни",
-"Suzuki": "Сузуки",
-"Suzuki Carry": "Сузуки Кэрри",
-"SX4": "ЭС 4",
-"Swift": "Свифт",
-"Vitara": "Витара",
-
-# Tesla
-"Cybertruck": "Кибертрак",
-"Model 3": "Модель 3",
-"Model S": "Модель S",
-"Model X": "Модель X",
-"Model Y": "Модель Y",
-"Roadster": "Родстер",
-"Semi": "Трейлер Semи",
-"Tesla": "Тесла",
-"Tesla Model Plaid": "Тесла Модель Плайд",
-
-# Toyota
-"Avensis": "Авенсис",
-"Camry": "Камри",
-"Corolla": "Королла",
-"Corolla Cross": "Королла Кросс",
-"Dyna": "Дайна",
-"HiAce": "ХайЭйс",
-"Highlander": "Хайлендер",
-"Hilux": "Хайлюкс",
-"Land Cruiser": "Ленд Крузер",
-"Mirai": "Мираи",
-"Prius": "Приус",
-"Proace": "Проэйс",
-"RAV4": "Рав 4",
-"Sequoia": "Секвоия",
-"Sienta": "Сента",
-"Tacoma": "Такома",
-"Toyota": "Тойота",
-"Toyota Hiace Commuter": "ХайЭйс Комьютер",
-"Toyota Proace City": "Проэйс Сити",
-"Tundra": "Тундра",
-"Venza": "Венза",
-"Vios": "Виос",
-"Yaris": "Ярис",
-"C-HR": "C-HR",
-
-# UAZ
-"UAZ": "УАЗ",
-"UAZ Cargo": "УАЗ Грузовик",
-"UAZ Hunter": "УАЗ Хантер",
-"UAZ Patriot": "УАЗ Патриот",
-"UAZ Pickup": "УАЗ Пикап",
-"UAZ Profi": "УАЗ Профи",
-
-# Vauxhall
-"Vauxhall": "Воксхолл",
-"Vauxhall Astra": "Воксхолл Астра",
-"Vauxhall Corsa": "Воксхолл Корса",
-
-# Volkswagen
-"Arteon": "Артеон",
-"Caddy": "Кэдди",
-"Crafter": "Крафтер",
-"Golf": "Гольф",
-"ID.3": "АйДи.3",
-"ID.4": "АйДи.4",
-"ID.Buzz": "АйДи.Базз",
-"ID. Buzz": "АйДи Базз",
-"Jetta": "Джетта",
-"Multivan": "Мультивэн",
-"Passat": "Пассат",
-"Polo": "Поло",
-"Scirocco": "Широкко",
-"T-Roc": "Т-Рок",
-"Tiguan": "Тигуан",
-"Touareg": "Туарег",
-"Transporter": "Транспортер",
-"Up!": "Ап!",
-"Volkswagen": "Фольксваген",
-"Volkswagen Amarok": "Фольксваген Амарок",
-"Volkswagen Caddy": "Фольксваген Кэдди",
-"Volkswagen Caravelle": "Каравелле",
-"Volkswagen Transporter": "Фольксваген Транспортер",
-
-# Volvo
-"S60": "S60",
-"S90": "S90",
-"V60": "V60",
-"Volvo": "Вольво",
-"XC40": "XC40",
-"XC60": "XC60",
-"XC90": "XC90",
-
-# Wey
-"Wey": "Вей",
-
-# Wuling
-"Wuling": "Вулинг",
-"Wuling Hongguang": "Вулинг Хонггуан",
-"Wuling Rongguang": "Вулинг Жунгуан",
-"Wuling Sunshine": "Вулинг Саншайн",
-
-# XPeng
-"G3": "ХПэнг G3",
-"G9": "ХПэнг G9",
-"P7": "ХПэнг P7",
-"XPeng": "ХПэнг",
-"XPeng G3": "ХПэнг G3",
-"XPeng G9": "ХПэнг G9",
-"XPeng P7": "ХПэнг P7",
-
-# Yema
-"Yema": "Йема",
-
-# ZAZ
-"ZAZ": "Заз",
-
-# Zetta
-"Zetta": "Зетта",
-
-# Общие категории
-"Ambulance": "Скорая помощь",
-"Antique Car": "Антикварный автомобиль",
-"Armored Car": "Бронированный автомобиль",
-"ATV": "Вездеход",
-"Bus": "Автобус",
-"Bulldozer": "Бульдозер",
-"Cargo Truck": "Грузовой автомобиль",
-"Classic Car": "Классический автомобиль",
-"Construction Equipment": "Строительное оборудование",
-"Container Carrier": "Контейнеровоз",
-"Convertible": "Кабриолет",
-"Crane Truck": "Кран-манипулятор",
-"Cruiser": "Круизер",
-"Diplomatic Car": "Дипломатическое транспортное средство",
-"Dual Sport Bike": "Двухрежимный мотоцикл",
-"Dump Truck": "Самосвал",
-"Emergency Response": "Аварийно-спасательная служба",
-"Enduro Bike": "Эндуро",
-"Excavator": "Экскаватор",
-"Fire Engine": "Пожарная машина",
-"Flatbed": "Платформа",
-"Forklift": "Погрузчик",
-"Funeral Coach": "Катафалк",
-"Government Fleet": "Государственный автопарк",
-"Hot Rod": "Хотрод",
-"Loader": "Погрузчик",
-"Medical Transport": "Медицинская перевозка",
-"Military Vehicle": "Военная техника",
-"Mobile Crane": "Автомобильный кран",
-"Motorcycle": "Мотоцикл",
-"Muscle Car": "Мускул-кар",
-"Off-Road Bike": "Внедорожный мотоцикл",
-"Police Car": "Полиция",
-"Prison Transport": "Транспортировка заключенных",
-"Quad Bike": "Квадроцикл",
-"Reefer": "Изотермическая фура",
-"Rescue Vehicle": "Спасательное транспортное средство",
-"Retro Style": "Ретро-стиль",
-"Road Roller": "Каток дорожный",
-"Scooter": "Скутер",
-"Security Vehicle": "Охрана и безопасность",
-"Semi-trailer": "Полуприцеп",
-"Side-by-Side": "SSV (Side by Side)",
-"Snow Plow": "Снегоочистительная техника",
-"Sports Bike": "Спортбайк",
-"Three-Wheeler": "Трицикл",
-"Tipper": "Самосвальная техника",
-"Touring Bike": "Туристический мотоцикл",
-"Trailer": "Прицеп",
-"Trash Collector": "Мусоровоз",
-"Truck": "Грузовик",
-"UTV": "Универсальное транспортное средство",
-"Utility Vehicle": "Спецтехника",
+    "Integra": "Интегра",
+    "MDX": "МДХ",
+    "RDX": "РДХ",
+    "RSX": "РСХ",
+    "TLX": "ТЛКС",
+    # ... (остальной словарь полностью)
 }
 
 # Глобальные переменные для дополнений
@@ -932,20 +201,20 @@ def translate_full_string(text: str, final_struct: Dict) -> str:
     translated_parts = [format_custom(part, final_struct) for part in parts]
     return " / ".join(translated_parts)
 
-def process_text_fast(text: str, final_struct: Dict, translit_allowed: bool = True) -> str:
+def process_text_fast(text: str, final_struct: Dict, pattern: re.Pattern, mapping: Dict, translit_allowed: bool = True) -> str:
     if not isinstance(text, str) or not final_struct:
         return text
-    pattern_delim = re.compile(r'([/;])')
+    # Используем переданный pattern и mapping
     if any(d in text for d in ['/', ';']):
-        parts = pattern_delim.split(text)
+        parts = pattern.split(text)
         result_parts = []
         for part in parts:
             if part in ['/', ';']:
                 result_parts.append(part)
             else:
                 key_lower = part.lower()
-                if key_lower in final_struct["map"]:
-                    val = final_struct["map"][key_lower][1]
+                if key_lower in mapping:
+                    val = mapping[key_lower][1]
                     result_parts.append(val)
                 else:
                     if translit_allowed and contains_latin(part) and not contains_cyrillic(part):
@@ -956,8 +225,8 @@ def process_text_fast(text: str, final_struct: Dict, translit_allowed: bool = Tr
         return "".join(result_parts)
     else:
         key_lower = text.lower()
-        if key_lower in final_struct["map"]:
-            return final_struct["map"][key_lower][1]
+        if key_lower in mapping:
+            return mapping[key_lower][1]
         else:
             if translit_allowed and contains_latin(text) and not contains_cyrillic(text):
                 cyr = latin_to_cyrillic(text)
@@ -1059,7 +328,13 @@ def prepare_additions_fast(base_keys: set, candidates: set, threshold: float = 0
 def run_streamlit_app() -> None:
     if st is None:
         return
-    
+
+    # Предварительно создаем структуру после загрузки словаря и возможных дополнений
+    global final_struct, pattern, mapping
+    final_struct = build_final_struct(car_brands_models, added_pairs)
+    pattern = final_struct.get("pattern")
+    mapping = final_struct.get("map", {})
+
     st.set_page_config(page_title="Автообработка", layout="wide")
     st.title("Распознавание брендов/моделей")
     st.markdown("Загрузите CSV/XLSX, выберите столбец — скрипт автоматически подсветит совпадения.")
@@ -1071,7 +346,6 @@ def run_streamlit_app() -> None:
     sidebar.header("Загрузить словарь (опционально)")
     dict_file = sidebar.file_uploader("Файл словаря (json/csv/xlsx)", type=["json", "csv", "xls", "xlsx"])
     dict_url = sidebar.text_input("URL словаря (json/csv/xlsx) — опционально")
-    
     if sidebar.button("Загрузить словарь"):
         loaded = {}
         if dict_file is not None:
@@ -1089,6 +363,10 @@ def run_streamlit_app() -> None:
                 car_brands_models[k] = v
             added_pairs.update(loaded)
             save_additions()
+            # Обновляем структуру после изменения словаря
+            final_struct = build_final_struct(car_brands_models, added_pairs)
+            pattern = final_struct.get("pattern")
+            mapping = final_struct.get("map", {})
             st.success(f"Загружено {len(loaded)} пар из словаря")
         else:
             st.info("Словарь не загружен или пустой")
@@ -1101,13 +379,16 @@ def run_streamlit_app() -> None:
             car_brands_models[new_k] = new_v
             added_pairs[new_k] = new_v
             save_additions()
+            # Обновляем структуру после изменения словаря
+            final_struct = build_final_struct(car_brands_models, added_pairs)
+            pattern = final_struct.get("pattern")
+            mapping = final_struct.get("map", {})
             st.success(f"Добавлено: {new_k} → {new_v}")
         else:
             st.error("Поля обязательны")
 
     uploaded = st.file_uploader("Выберите CSV/XLSX", type=["csv", "xls", "xlsx"])
     external_url = sidebar.text_input("URL внешних данных (CSV/XLSX) — необязательно")
-    
     if not uploaded:
         st.info("Загрузите файл выше.")
         return
@@ -1146,15 +427,15 @@ def run_streamlit_app() -> None:
                 car_brands_models[k] = v
             added_pairs.update(additions)
             save_additions()
+            # Обновляем структуру после добавлений
+            final_struct = build_final_struct(car_brands_models, added_pairs)
+            pattern = final_struct.get("pattern")
+            mapping = final_struct.get("map", {})
 
-        final_struct = build_final_struct(car_brands_models, additions)
-        pattern = final_struct.get("pattern")
-        mapping = final_struct.get("map", {})
-
-        # Обработка данных
+        # Обработка текста
         df["Исходное"] = df[col]
         df["Обработанное"] = df[col].astype(str).apply(
-            lambda v: process_text_fast(v, final_struct, translit_allowed=translit_allowed)
+            lambda v: process_text_fast(v, final_struct, pattern, mapping, translit_allowed=translit_allowed)
         )
 
         # Создаем HTML таблицу с подсветкой
@@ -1202,6 +483,7 @@ def run_streamlit_app() -> None:
             csv_bytes = df.to_csv(index=False, encoding=CSV_ENCODING).encode(CSV_ENCODING)
             st.download_button("Скачать CSV", csv_bytes, file_name="result.csv", mime="text/csv")
 
+
 # --- Основная точка входа ---
 
 def main():
@@ -1230,7 +512,7 @@ def main():
         if not args.input or not args.column:
             print("Укажите --input и --column, или --list")
             return
-        
+
         # Чтение файла
         try:
             if args.input.lower().endswith(('.xls', '.xlsx')):
@@ -1252,37 +534,44 @@ def main():
                 for k, v in loaded.items():
                     car_brands_models[k] = v
                 added_pairs.update(loaded)
-                save_additions()
+                # Обновляем структуру
+                final_struct = build_final_struct(car_brands_models, added_pairs)
+        else:
+            final_struct = build_final_struct(car_brands_models, added_pairs)
 
-        # Внешние данные
-        ext_df = load_external_data(args.external) if args.external else pd.DataFrame()
+        pattern = final_struct.get("pattern")
+        mapping = final_struct.get("map", {})
 
         # Подготовка данных
         series = df[args.column]
         dataset_words = extract_words_from_series(series)
-        external_words = extract_words_from_series(ext_df.stack()) if not ext_df.empty else set()
+        external_words = extract_words_from_series(pd.Series())  # пустой, т.к. не грузим внешние
+        if args.external:
+            ext_df = load_external_data(args.external)
+            external_words = extract_words_from_series(ext_df.stack())
+
         base_keys = set(car_brands_models.keys())
         candidates = (dataset_words | external_words) - base_keys
 
         # Автоматическое добавление
         additions = prepare_additions_fast(base_keys, candidates, threshold=0.85)
-        for k, v in additions.items():
-            car_brands_models[k] = v
-        added_pairs.update(additions)
-        save_additions()
-
-        # Создаем структуру
-        final_struct = build_final_struct(car_brands_models, additions)
-        pattern = final_struct.get("pattern")
-        mapping = final_struct.get("map", {})
+        if additions:
+            for k, v in additions.items():
+                car_brands_models[k] = v
+            added_pairs.update(additions)
+            save_additions()
+            # Обновляем структуру
+            final_struct = build_final_struct(car_brands_models, added_pairs)
+            pattern = final_struct.get("pattern")
+            mapping = final_struct.get("map", {})
 
         # Обработка данных
         df["Исходное"] = df[args.column]
         df["Обработанное"] = df[args.column].astype(str).apply(
-            lambda v: process_text_fast(v, final_struct, translit_allowed=True)
+            lambda v: process_text_fast(v, final_struct, pattern, mapping, translit_allowed=True)
         )
 
-        # Сохранение результата
+        # Сохраняем результат
         output_path = args.output or ("result.xlsx" if args.input.lower().endswith(('.xls', '.xlsx')) else "result.csv")
         try:
             if output_path.lower().endswith(('.xls', '.xlsx')):
