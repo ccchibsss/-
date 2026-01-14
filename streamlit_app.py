@@ -73,8 +73,10 @@ car_brands_models: Dict[str, str] = {
     "RDX": "РДХ",
     "RSX": "РСХ",
     "TLX": "ТЛКС",
+    # ... (остальной ваш список, я не вставлял весь здесь из-за длины)
 }
 
+# Загрузка дополнений из файла
 if os.path.exists(ADDITIONS_FILE):
     try:
         with open(ADDITIONS_FILE, "r", encoding="utf-8") as f:
@@ -272,7 +274,7 @@ def run():
         """
         <div style="background:linear-gradient(90deg,#2196F3,#21CBF3);padding:16px;border-radius:8px">
         <h2 style="color:white;margin:0">🛠️ Настройки словаря</h2>
-        <p style="color:rgba(255,255,255,0.9);margin:4px 0 0">Редактирование словаря латиница→кириллица</p>
+        <p style="color:rgba(255,255,255,0.9);margin:4px 0 0">Редактирование словаря марок и моделей автомобилей</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -280,7 +282,7 @@ def run():
 
     # Инструкция по формату файла
     st.info("Поддерживаются файлы: JSON, CSV, XLSX. В файле должны быть минимум 2 столбца: латиница и кириллица. Например:\n\n" +
-            "- JSON: {\"A\":\"А\", \"B\":\"Б\"}\n" +
+            "- JSON: {\"Acura\": \"Акура\", \"BMW\": \"БМВ\"}\n" +
             "- CSV: латиница,кириллица\n" +
             "- XLSX: первый столбец - латиница, второй - кириллица")
 
@@ -310,16 +312,18 @@ def run():
             else:
                 st.error("Некорректный тип файла.")
             if loaded_dict:
-                latin_to_cyr.update({k:v for k,v in loaded_dict.items()})
+                # Обновляем основной словарь
+                for k, v in loaded_dict.items():
+                    car_brands_models[k] = v
                 st.success("Словарь обновлён из файла.")
             else:
                 st.warning("Файл пуст или формат файла некорректен.")
         except Exception as e:
             st.error(f"Ошибка при загрузке словаря: {e}")
 
-    # Редактирование словаря вручную через text_area
+    # Редактирование словаря вручную через текстовое поле
     st.subheader("Редактировать словарь вручную")
-    dict_text = "\n".join([f"{k},{v}" for k, v in latin_to_cyr.items()])
+    dict_text = "\n".join([f"{k},{v}" for k, v in car_brands_models.items()])
     edited_text = st.text_area("Редактировать словарь (каждая строка: латиница,кириллица)", value=dict_text, height=300)
 
     if st.button("Сохранить словарь"):
@@ -330,15 +334,14 @@ def run():
                 if len(parts) == 2:
                     k, v = parts
                     new_dict[k.strip()] = v.strip()
-        latin_to_cyr.clear()
-        latin_to_cyr.update(new_dict)
+        car_brands_models.clear()
+        car_brands_models.update(new_dict)
         # Можно сохранить на диск
-        with open("latin_to_cyr.json", "w", encoding="utf-8") as f:
-            json.dump(latin_to_cyr, f, ensure_ascii=False, indent=2)
+        with open("additional_brands.json", "w", encoding="utf-8") as f:
+            json.dump(car_brands_models, f, ensure_ascii=False, indent=2)
         st.success("Словарь сохранён.")
 
     # --- Остальной интерфейс (транслитерация, обработка файла) ---
-
     st.markdown(
         """
         <div style="background:linear-gradient(90deg,#4CAF50,#81C784);padding:16px;border-radius:8px;margin-top:20px">
