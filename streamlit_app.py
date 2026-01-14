@@ -1,4 +1,4 @@
-# !/usr/bin/env python3
+#!/usr/bin/env python3
 # Улучшенное, оптимизированное и более красочное приложение Streamlit для замены
 # и предварительного просмотра брендов/моделей авто
 import io
@@ -11,8 +11,7 @@ import pandas as pd
 import requests
 import streamlit as st
 
-# Необязательный морфологический анализатор (если есть — используется для
-# склонения)
+# Необязательный морфологический анализатор (если есть — используется для склонения)
 try:
     import pymorphy2
     morph = pymorphy2.MorphAnalyzer()
@@ -308,7 +307,7 @@ def run():
 
         if uploaded and not col_name:
             try:
-                # используем свежую копию байтов, чтобы не "съесть" оригинальный объект
+                # используем свежую копию байтов, чтобы не "съедать" оригинальный объект
                 data_bytes = uploaded.getvalue()
                 if uploaded.name.lower().endswith(".csv"):
                     df0 = pd.read_csv(io.StringIO(data_bytes.decode("utf-8")), nrows=0)
@@ -344,6 +343,17 @@ def run():
                     buf.seek(0)
                     st.download_button("⬇️ Скачать XLSX", buf, file_name="result.xlsx",
                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                
+                # Вставка кнопки для скачивания CSV
+                csv_buf = io.BytesIO()
+                df_res.to_csv(csv_buf, index=False, encoding=CSV_ENCODING)
+                csv_buf.seek(0)
+                st.download_button(
+                    label="⬇️ Скачать CSV",
+                    data=csv_buf,
+                    file_name="result.csv",
+                    mime="text/csv"
+                )
             except Exception as e:
                 st.error(f"Ошибка обработки: {e}")
 
