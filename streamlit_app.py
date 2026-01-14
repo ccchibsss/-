@@ -284,8 +284,13 @@ def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str,
         plain_list.append(plain)
         html_list.append(html)
 
+    # Обновляем только выбранный столбец
     df[col_name] = plain_list
     df[f"{col_name}_preview_html"] = html_list
+
+    # Преобразуем только выбранный столбец к строковому типу (чтобы избежать ошибок arrow)
+    df[col_name] = df[col_name].astype(str)
+
     return df
 
 # --- Обработка текста с поиском слов и подсветкой ---
@@ -321,15 +326,12 @@ def process_text(
             if start_idx != -1:
                 end_idx = start_idx + len(word_lower)
                 # Подбираем соответствующую позицию в исходном тексте
-                # Для простоты берем из оригинального текста
                 start_in_orig = None
                 end_in_orig = None
                 if idx == 0:
                     start_in_orig = start_idx
                     end_in_orig = end_idx
                 else:
-                    # В случае транслита, ищем по исходному
-                    # Можно усложнить, если нужно более точно
                     start_in_orig = start_idx
                     end_in_orig = end_idx
                 orig_substring = text[start_in_orig:end_in_orig]
