@@ -302,7 +302,7 @@ def run():
     # Редактирование словаря вручную через text_area
     st.subheader("Редактировать словарь вручную")
     dict_text = "\n".join([f"{k},{v}" for k, v in latin_to_cyr.items()])
-    edited_text = st.text_area("Редактировать словарь (каждая строка: латиница,кириллица)", value=dict_text, height=100)
+    edited_text = st.text_area("Редактировать словарь (каждая строка: латиница,кириллица)", value=dict_text, height=300)
 
     if st.button("Сохранить словарь"):
         new_dict = {}
@@ -355,32 +355,51 @@ def run():
     )
 
     uploaded_file = st.file_uploader("Загрузите Excel или CSV файл", type=["xlsx", "xls", "csv"])
-    col_name = st.text_input("Введите название столбца для обработки", value="Название")
-    if uploaded_file and col_name:
+
+    if uploaded_file:
         try:
             file_bytes = uploaded_file.read()
-            df = process_file_for_processing(file_bytes, uploaded_file.name, col_name, {})
-            st.success("Файл успешно обработан")
-            st.dataframe(df)
-            # Предлагаем скачать
-            if uploaded_file.name.lower().endswith((".xlsx", ".xls")):
-                buffer = io.BytesIO()
-                df.to_excel(buffer, index=False, engine='openpyxl')
-                buffer.seek(0)
-                st.download_button(
-                    label="Скачать обработанный Excel",
-                    data=buffer,
-                    file_name="processed_" + uploaded_file.name,
-                    mime="application/vnd.openpyxl.spreadsheetml.sheet"
-                )
-            elif uploaded_file.name.lower().endswith(".csv"):
-                csv_bytes = df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Скачать обработанный CSV",
-                    data=csv_bytes,
-                    file_name="processed_" + uploaded_file.name,
-                    mime="text/csv"
-                )
+            ext = os.path.splitext(uploaded_file.name)[1].lower()
+            # Предварительно читаем файл, чтобы получить список колонок
+            if ext in ['.xlsx', '.xls']:
+                df_preview = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl', nrows=0)
+            elif ext == '.csv':
+                df_preview = pd.read_csv(io.StringIO(file_bytes.decode('utf-8')), nrows=0)
+            else:
+                df_preview = pd.DataFrame()
+
+            if not df_preview.empty:
+                col_options = list(df_preview.columns)
+                col_name = st.selectbox("Выберите название столбца для обработки", options=col_options)
+            else:
+                col_name = st.text_input("Введите название столбца для обработки", value="Название")
+            
+            if col_name:
+                # Обработка файла полностью
+                df = process_file_for_processing(file_bytes, uploaded_file.name, col_name, {})
+                st.success("Файл успешно обработан")
+                st.dataframe(df)
+                # Предлагаем скачать
+                if ext in ['.xlsx', '.xls']:
+                    buffer = io.BytesIO()
+                    df.to_excel(buffer, index=False, engine='openpyxl')
+                    buffer.seek(0)
+                    st.download_button(
+                        label="Скачать обработанный Excel",
+                        data=buffer,
+                        file_name="processed_" + uploaded_file.name,
+                        mime="application/vnd.openpyxl.spreadsheetml.sheet"
+                    )
+                elif ext == '.csv':
+                    csv_bytes = df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="Скачать обработанный CSV",
+                        data=csv_bytes,
+                        file_name="processed_" + uploaded_file.name,
+                        mime="text/csv"
+                    )
+            else:
+                st.warning("Не удалось определить названия столбцов.")
         except Exception as e:
             st.error(f"Ошибка при обработке файла: {e}")
 
