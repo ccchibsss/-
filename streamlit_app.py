@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# Улучшенное, оптимизированное и более красочное приложение Streamlit для замены
-# и предварительного просмотра брендов/моделей авто
 import io
 import os
 import json
@@ -11,17 +9,73 @@ import pandas as pd
 import requests
 import streamlit as st
 
-# Необязательный морфологический анализатор (если есть — используется для склонения)
+# Необязательный морфологический анализатор
 try:
     import pymorphy2
     morph = pymorphy2.MorphAnalyzer()
 except Exception:
     morph = None
 
+# --- Словарь транслитерации из латиницы в кириллицу ---
+lat2cyr_dict = {
+    'A':'А','a':'а','B':'Б','b':'б','V':'В','v':'в','G':'Г','g':'г',
+    'D':'Д','d':'д','E':'Е','e':'е','Yo':'Ё','yo':'ё','ZH':'Ж','zh':'ж',
+    'Z':'З','z':'з','I':'И','i':'и','Y':'Й','y':'й','K':'К','k':'к',
+    'L':'Л','l':'л','M':'М','m':'м','N':'Н','n':'н','O':'О','o':'о',
+    'P':'П','p':'п','R':'Р','r':'р','S':'С','s':'с','T':'Т','t':'т',
+    'U':'У','u':'у','F':'Ф','f':'ф','Kh':'Х','kh':'х','Ts':'Ц','ts':'ц',
+    'Ch':'Ч','ch':'ч','Sh':'Ш','sh':'ш','Shch':'Щ','shch':'щ',
+    'Y\'':'Ы','y\'':'ы','E\'':'Э','e\'':'э','Yu':'Ю','yu':'ю','Ya':'Я','ya':'я'
+}
+
+# Изначальный словарь латиница→кириллица
+latin_to_cyr = dict(lat2cyr_dict)
+
+# --- Транслитерация с латиницы в кириллицу ---
+def transliterate_latin_to_cyrillic(text: str) -> str:
+    # Тут можно реализовать по принципу "по символам" или более сложный алгоритм
+    # Для простоты — перебираем строки, ищем совпадения из словаря
+    result = ''
+    i = 0
+    while i < len(text):
+        # Ищем максимально длинное совпадение
+        match_found = False
+        for length in [3,2,1]:
+            if i + length <= len(text):
+                chunk = text[i:i+length]
+                if chunk in latin_to_cyr:
+                    result += latin_to_cyr[chunk]
+                    i += length
+                    match_found = True
+                    break
+        if not match_found:
+            result += text[i]
+            i += 1
+    return result
+
+# --- Обратная транслитерация (кириллица в латиницу) ---
+def transliterate_cyrillic_to_latin(text: str) -> str:
+    # Обратный словарь
+    cyr2lat = {v: k for k, v in latin_to_cyr.items()}
+    result = ''
+    for ch in text:
+        result += cyr2lat.get(ch, ch)
+    return result
+
+# --- Варианты транслитерации ---
+def transliterate(text: str, direction: str = 'lat2cyr') -> str:
+    if direction == 'lat2cyr':
+        return transliterate_latin_to_cyrillic(text)
+    elif direction == 'cyr2lat':
+        return transliterate_cyrillic_to_latin(text)
+    else:
+        return text
+
+# --- Остальной код (обработка словаря, поиска, подсветки) ---
+
 CSV_ENCODING = "utf-8-sig"
 ADDITIONS_FILE = "additional_brands.json"
 
-# Исходный словарь брендов и моделей (может быть расширен пользователем)
 car_brands_models: Dict[str, str] = {
     "Acura": "Акура",
     "Integra": "Интегра",
@@ -29,10 +83,8 @@ car_brands_models: Dict[str, str] = {
     "RDX": "РДХ",
     "RSX": "РСХ",
     "TLX": "ТЛКС",
-    # ... (остальной словарь сокращён для краткости, добавьте весь ваш список)
 }
 
-# Загрузка сохранённых дополнений, если есть
 if os.path.exists(ADDITIONS_FILE):
     try:
         with open(ADDITIONS_FILE, "r", encoding="utf-8") as f:
@@ -44,7 +96,6 @@ if os.path.exists(ADDITIONS_FILE):
 
 @lru_cache(maxsize=20000)
 def decline_word_cached(word: str) -> str:
-    """Возвращает склонённое слово в именительном падеже (если есть pymorphy2)."""
     if not word or morph is None:
         return word
     try:
@@ -55,22 +106,14 @@ def decline_word_cached(word: str) -> str:
         return word
 
 def build_final_struct(base_map: Dict[str, str], additions: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-    """
-    Строит структуру trie и метаданные для быстрого поиска подстрок (без учёта регистра).
-    Возвращает словарь с trie, отображением и максимальной длиной поиска.
-    """
     final = {**(base_map or {})}
     if additions:
         final.update(additions)
-
     final = {k: v for k, v in final.items() if isinstance(k, str) and k.strip()}
-
     if not final:
         return {"trie": None, "map": {}, "max_len": 0}
-
     mapping: Dict[str, Tuple[str, str]] = {}
     max_len = 0
-
     for k, v in final.items():
         lk = k.lower()
         display = v if v is not None else k
@@ -78,7 +121,6 @@ def build_final_struct(base_map: Dict[str, str], additions: Optional[Dict[str, s
         mapping[lk] = (k, display_decl)
         if len(lk) > max_len:
             max_len = len(lk)
-
     trie = {}
     END = "_end_"
     for lk, pair in mapping.items():
@@ -86,7 +128,6 @@ def build_final_struct(base_map: Dict[str, str], additions: Optional[Dict[str, s
         for ch in lk:
             node = node.setdefault(ch, {})
         node[END] = (lk, pair)
-
     return {"trie": trie, "map": mapping, "max_len": max_len}
 
 def _is_word_char(c: str) -> bool:
@@ -95,14 +136,12 @@ def _is_word_char(c: str) -> bool:
 def get_matches(text: str, struct: Dict[str, Any]) -> List[Tuple[int, int, str, str]]:
     if not text or not struct or struct.get("trie") is None:
         return []
-
     trie = struct["trie"]
     text_l = text.lower()
     n = len(text_l)
     max_len = struct.get("max_len", n)
     END = "_end_"
     matches: List[Tuple[int, int, str, str]] = []
-
     for i in range(n):
         node = trie
         for j in range(i, min(n, i + max_len)):
@@ -159,7 +198,6 @@ def process_text(text: str, struct: Dict[str, Any]) -> Tuple[str, str]:
 def load_dictionary(source: Optional[str] = None, fileobj: Optional[io.BytesIO] = None) -> Dict[str, str]:
     try:
         if fileobj is not None:
-            # безопасно получить байты и работать с копиями, не "съедая" исходный объект
             if hasattr(fileobj, "getvalue"):
                 data_bytes = fileobj.getvalue()
             else:
@@ -214,7 +252,6 @@ def load_dictionary(source: Optional[str] = None, fileobj: Optional[io.BytesIO] 
     return {}
 
 def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, struct: Dict[str, Any]) -> pd.DataFrame:
-    # Создаём копию потоков, корректно обрабатываем CSV (как строковый поток) и Excel (как байтовый)
     if filename.lower().endswith(".csv"):
         try:
             text = file_bytes.decode("utf-8")
@@ -223,142 +260,131 @@ def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str,
         df = pd.read_csv(io.StringIO(text))
     else:
         df = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
-
     if col_name not in df.columns:
         raise ValueError(f"Столбец '{col_name}' не найден в файле.")
-
     series = df[col_name].fillna("").astype(str)
     plain_list = []
     html_list = []
-
     for txt in series:
         plain, html = process_text(txt, struct)
         plain_list.append(plain)
         html_list.append(html)
-
     df[col_name] = plain_list
     df[f"{col_name}_preview_html"] = html_list
-
     return df
 
+# --- Основная функция ---
 def run():
     st.set_page_config(page_title="🚗 Обработка брендов/моделей", layout="wide")
+
+    # --- Раздел "Настройки словаря" ---
     st.markdown(
         """
         <div style="background:linear-gradient(90deg,#2196F3,#21CBF3);padding:16px;border-radius:8px">
-        <h2 style="color:white;margin:0">🚗 Обработка данных и расширение словаря</h2>
-        <p style="color:rgba(255,255,255,0.9);margin:4px 0 0">Быстрая подстановка и визуальный просмотр совпадений</p>
+        <h2 style="color:white;margin:0">🛠️ Настройки словаря</h2>
+        <p style="color:rgba(255,255,255,0.9);margin:4px 0 0">Редактирование словаря латиница→кириллица</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.write("")
 
-    base_dict = car_brands_models.copy()
-    struct = build_final_struct(base_dict)
+    # Загрузка словаря из файла
+    uploaded_dict_file = st.file_uploader("Загрузить файл словаря (JSON или CSV)", type=["json", "csv"])
+    if uploaded_dict_file:
+        try:
+            dict_bytes = uploaded_dict_file.read()
+            if uploaded_dict_file.name.lower().endswith(".json"):
+                loaded_dict = json.loads(dict_bytes.decode("utf-8"))
+            elif uploaded_dict_file.name.lower().endswith(".csv"):
+                df_dict = pd.read_csv(io.StringIO(dict_bytes.decode("utf-8")))
+                loaded_dict = {str(k): str(v) for k, v in zip(df_dict.iloc[:,0], df_dict.iloc[:,1])}
+            else:
+                loaded_dict = {}
+            # Обновляем словарь
+            if loaded_dict:
+                latin_to_cyr.update({k:v for k,v in loaded_dict.items()})
+                st.success("Словарь обновлён из файла.")
+        except Exception as e:
+            st.error(f"Ошибка при загрузке словаря: {e}")
 
-    with st.expander("🛠️ Настройки словаря", expanded=True):
-        left, right = st.columns([2, 1])
-        with left:
-            uploaded_dict = st.file_uploader("📁 Загрузить файл словаря (json/csv/xlsx)", type=["json", "csv", "xls", "xlsx"])
-            dict_url = st.text_input("🌐 Или указать URL (json/csv/xlsx)")
-            if st.button("🔄 Загрузить/Обновить словарь"):
-                with st.spinner("Загрузка..."):
-                    loaded = {}
-                    try:
-                        if uploaded_dict:
-                            loaded = load_dictionary(source=uploaded_dict.name, fileobj=uploaded_dict)
-                        elif dict_url:
-                            loaded = load_dictionary(source=dict_url)
-                        if loaded:
-                            base_dict.update(loaded)
-                            with open(ADDITIONS_FILE, "w", encoding="utf-8") as f:
-                                json.dump({str(k): str(v) for k, v in base_dict.items()}, f, ensure_ascii=False, indent=2)
-                            struct = build_final_struct(base_dict)
-                            st.success(f"Словарь обновлён: +{len(loaded)} пар")
-                        else:
-                            st.info("Ничего не загружено (проверьте формат)")
-                    except Exception as e:
-                        st.error(f"Ошибка: {e}")
+    # Редактирование словаря вручную
+    st.subheader("Редактировать словарь вручную")
+    # Для небольшого словаря можно показывать его в виде таблицы
+    dict_df = pd.DataFrame.from_dict(latin_to_cyr, orient='index', columns=['Кирилица'])
+    edited_df = st.experimental_data_editor(dict_df, num_rows="dynamic")
+    if st.button("Сохранить словарь"):
+        # Обновляем словарь
+        latin_to_cyr.clear()
+        for index, row in edited_df.iterrows():
+            latin_to_cyr[index] = row['Кирилица']
+        # Можно сохранить в файл
+        with open("latin_to_cyr.json", "w", encoding="utf-8") as f:
+            json.dump(latin_to_cyr, f, ensure_ascii=False, indent=2)
+        st.success("Словарь сохранён в файл.")
 
-        with right:
-            st.markdown("#### Текущий словарь (часть)")
-            if base_dict:
-                df_dict = pd.DataFrame(list(base_dict.items()), columns=["Ключ", "Значение"]).head(200)
-                st.dataframe(df_dict)
+    # --- Транслитерация с латиницы в кириллицу ---
+    st.markdown(
+        """
+        <div style="background:linear-gradient(90deg,#4CAF50,#81C784);padding:16px;border-radius:8px;margin-top:20px">
+        <h2 style="color:white;margin:0">🌐 Транслитерация (латиница → кириллица)</h2>
+        <p style="color:rgba(255,255,255,0.9);margin:4px 0 0">Введите латиницу для преобразования в кириллицу</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-            st.markdown("#### Добавить вручную")
-            new_k = st.text_input("🔑 Новый ключ", key="nk")
-            new_v = st.text_input("📝 Новое значение", key="nv")
-            if st.button("➕ Добавить пару вручную"):
-                if new_k and new_v:
-                    base_dict[new_k] = new_v
-                    with open(ADDITIONS_FILE, "w", encoding="utf-8") as f:
-                        json.dump({str(k): str(v) for k, v in base_dict.items()}, f, ensure_ascii=False, indent=2)
-                    struct = build_final_struct(base_dict)
-                    st.success(f"Добавлено: '{new_k}':'{new_v}'")
-                else:
-                    st.warning("Заполните оба поля")
+    latin_input = st.text_area("Введите текст на латинице", height=100)
+    col_direction = st.radio("Направление транслитерации", ("Латиница → Кириллица", "Кириллица → Латиница"))
+    if st.button("🔤 Транслитерировать"):
+        if col_direction == "Латиница → Кириллица":
+            result = transliterate(latin_input, 'lat2cyr')
+            st.success("Результат транслитерации (латиница → кириллица):")
+            st.code(result)
+        else:
+            result = transliterate(latin_input, 'cyr2lat')
+            st.success("Результат транслитерации (кириллица → латиница):")
+            st.code(result)
 
-    st.markdown("---")
-    with st.expander("📝 Обработка файла", expanded=True):
-        uploaded = st.file_uploader("📂 Выберите CSV/XLSX файл для обработки", type=["csv", "xls", "xlsx"])
-        col_name = st.text_input("🔤 Имя столбца для обработки (или оставьте пустым для выбора)")
+    # --- Обработка файла и поиск ---
+    st.markdown(
+        """
+        <div style="background:linear-gradient(90deg,#2196F3,#21CBF3);padding:16px;border-radius:8px;margin-top:20px">
+        <h2 style="color:white;margin:0">🚗 Обработка данных</h2>
+        <p style="color:rgba(255,255,255,0.9);margin:4px 0 0">Загрузка файла (Excel или CSV), поиск и подсветка</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-        if uploaded and not col_name:
-            try:
-                # используем свежую копию байтов, чтобы не "съедать" оригинальный объект
-                data_bytes = uploaded.getvalue()
-                if uploaded.name.lower().endswith(".csv"):
-                    df0 = pd.read_csv(io.StringIO(data_bytes.decode("utf-8")), nrows=0)
-                else:
-                    df0 = pd.read_excel(io.BytesIO(data_bytes), nrows=0, engine='openpyxl')
-                cols = df0.columns.tolist()
-                if cols:
-                    col_name = st.selectbox("📑 Выберите столбец", cols)
-            except Exception:
-                pass
-
-        if uploaded and col_name:
-            try:
-                with st.spinner("Обрабатываем..."):
-                    # снова используем getvalue() — это безопасно и не зависит от позиции внутреннего указателя
-                    bytes_data = uploaded.getvalue()
-                    struct = build_final_struct(base_dict)
-                    df_res = process_file_for_processing(bytes_data, uploaded.name, col_name, struct)
-                st.success("✅ Обработка завершена")
-                st.markdown("### Превью (с подсветкой совпадений)")
-                show_df = df_res.head(50).copy()
-                html_table = show_df.to_html(escape=False, index=False)
-                st.markdown(html_table, unsafe_allow_html=True)
-                st.markdown("### Скачать результат")
-                buf = io.BytesIO()
-                if uploaded.name.lower().endswith(".csv"):
-                    df_res.to_csv(buf, index=False, encoding=CSV_ENCODING)
-                    buf.seek(0)
-                    st.download_button("⬇️ Скачать CSV", buf, file_name="result.csv", mime="text/csv")
-                else:
-                    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-                        df_res.to_excel(writer, index=False)
-                    buf.seek(0)
-                    st.download_button("⬇️ Скачать XLSX", buf, file_name="result.xlsx",
-                                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                
-                # Вставка кнопки для скачивания CSV
-                csv_buf = io.BytesIO()
-                df_res.to_csv(csv_buf, index=False, encoding=CSV_ENCODING)
-                csv_buf.seek(0)
+    uploaded_file = st.file_uploader("Загрузите Excel или CSV файл", type=["xlsx", "xls", "csv"])
+    col_name = st.text_input("Введите название столбца для обработки", value="Название")
+    if uploaded_file and col_name:
+        try:
+            file_bytes = uploaded_file.read()
+            df = process_file_for_processing(file_bytes, uploaded_file.name, col_name, {})
+            st.success("Файл успешно обработан")
+            st.dataframe(df)
+            # Предлагаем скачать
+            if uploaded_file.name.lower().endswith((".xlsx", ".xls")):
+                buffer = io.BytesIO()
+                df.to_excel(buffer, index=False, engine='openpyxl')
+                buffer.seek(0)
                 st.download_button(
-                    label="⬇️ Скачать CSV",
-                    data=csv_buf,
-                    file_name="result.csv",
+                    label="Скачать обработанный Excel",
+                    data=buffer,
+                    file_name="processed_" + uploaded_file.name,
+                    mime="application/vnd.openpyxl.spreadsheetml.sheet"
+                )
+            elif uploaded_file.name.lower().endswith(".csv"):
+                csv_bytes = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Скачать обработанный CSV",
+                    data=csv_bytes,
+                    file_name="processed_" + uploaded_file.name,
                     mime="text/csv"
                 )
-            except Exception as e:
-                st.error(f"Ошибка обработки: {e}")
-
-    st.markdown("---")
-    st.caption("Подсветка не влияет на экспортируемые данные — она предназначена только для визуальной проверки.")
+        except Exception as e:
+            st.error(f"Ошибка при обработке файла: {e}")
 
 if __name__ == "__main__":
     run()
