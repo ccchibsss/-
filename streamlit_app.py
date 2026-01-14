@@ -804,7 +804,6 @@ car_brands_models: Dict[str, str] = {
 "Touring Bike": "Туристический мотоцикл",
 "Trailer": "Прицеп",
 "Trash Collector": "Мусоровоз",
-"Truck": "Грузовик",
 }
 
 # --- Загрузка существующего файла словаря при запуске ---
@@ -961,6 +960,9 @@ def run():
                 # Обработка файла полностью
                 df = process_file_for_processing(file_bytes, uploaded_file.name, col_name, car_brands_models, translit_enabled)
                 st.success("Файл успешно обработан")
+                # Перед отображением преобразуем все столбцы к str
+                for col in df.columns:
+                    df[col] = df[col].astype(str)
                 st.dataframe(df)
                 # --- Скачивание ---
                 col1, col2 = st.columns(2)
@@ -1014,8 +1016,9 @@ def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str,
     df[col_name] = plain_list
     df[f"{col_name}_preview_html"] = html_list
 
-    # Преобразуем только выбранный столбец к строковому типу (чтобы избежать ошибок arrow)
-    df[col_name] = df[col_name].astype(str)
+    # Преобразуем все колонки к строковому типу для избежания ошибок Arrow
+    for col in df.columns:
+        df[col] = df[col].astype(str)
 
     return df
 
