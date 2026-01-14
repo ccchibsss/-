@@ -217,6 +217,10 @@ def run():
     st.title("🚗 Обработка данных и расширение словаря")
     st.markdown("---")
     
+    # Инициализация базового словаря
+    global base_dict
+    base_dict = car_brands_models.copy()
+
     # Раздел: Настройки словаря
     with st.expander("🛠️ Настройки словаря", expanded=True):
         col1, col2 = st.columns([2, 1])
