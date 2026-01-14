@@ -33,12 +33,9 @@ latin_to_cyr = dict(lat2cyr_dict)
 
 # --- Транслитерация с латиницы в кириллицу ---
 def transliterate_latin_to_cyrillic(text: str) -> str:
-    # Тут можно реализовать по принципу "по символам" или более сложный алгоритм
-    # Для простоты — перебираем строки, ищем совпадения из словаря
     result = ''
     i = 0
     while i < len(text):
-        # Ищем максимально длинное совпадение
         match_found = False
         for length in [3,2,1]:
             if i + length <= len(text):
@@ -53,9 +50,8 @@ def transliterate_latin_to_cyrillic(text: str) -> str:
             i += 1
     return result
 
-# --- Обратная транслитерация (кириллица в латиницу) ---
+# --- Обратная транслитерация ---
 def transliterate_cyrillic_to_latin(text: str) -> str:
-    # Обратный словарь
     cyr2lat = {v: k for k, v in latin_to_cyr.items()}
     result = ''
     for ch in text:
@@ -307,20 +303,27 @@ def run():
         except Exception as e:
             st.error(f"Ошибка при загрузке словаря: {e}")
 
-    # Редактирование словаря вручную
+    # Редактирование словаря вручную (альтернатива experimental_data_editor)
     st.subheader("Редактировать словарь вручную")
-    # Для небольшого словаря можно показывать его в виде таблицы
-    dict_df = pd.DataFrame.from_dict(latin_to_cyr, orient='index', columns=['Кирилица'])
-    edited_df = st.experimental_data_editor(dict_df, num_rows="dynamic")
+    # Создаем текст для редактирования
+    dict_text = "\n".join([f"{k},{v}" for k, v in latin_to_cyr.items()])
+    edited_text = st.text_area("Редактировать словарь (каждая строка: латиница,кириллица, через запятую)", value=dict_text, height=300)
+
     if st.button("Сохранить словарь"):
+        new_dict = {}
+        for line in edited_text.splitlines():
+            if line.strip():
+                parts = line.split(",", 1)
+                if len(parts) == 2:
+                    k, v = parts
+                    new_dict[k.strip()] = v.strip()
         # Обновляем словарь
         latin_to_cyr.clear()
-        for index, row in edited_df.iterrows():
-            latin_to_cyr[index] = row['Кирилица']
-        # Можно сохранить в файл
+        latin_to_cyr.update(new_dict)
+        # Сохраняем в файл
         with open("latin_to_cyr.json", "w", encoding="utf-8") as f:
             json.dump(latin_to_cyr, f, ensure_ascii=False, indent=2)
-        st.success("Словарь сохранён в файл.")
+        st.success("Словарь сохранён.")
 
     # --- Транслитерация с латиницы в кириллицу ---
     st.markdown(
