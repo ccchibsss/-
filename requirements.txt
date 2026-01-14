@@ -1,6 +1,6 @@
 streamlit
 pandas
-openpyxl
-xlrd
 requests
+openpyxl
 pymorphy2
+xlrd
