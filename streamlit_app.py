@@ -28,10 +28,8 @@ lat2cyr_dict = {
     'Y\'':'Ы','y\'':'ы','E\'':'Э','e\'':'э','Yu':'Ю','yu':'ю','Ya':'Я','ya':'я'
 }
 
-# Изначальный словарь латиница→кириллица
 latin_to_cyr = dict(lat2cyr_dict)
 
-# --- Транслитерация с латиницы в кириллицу ---
 def transliterate_latin_to_cyrillic(text: str) -> str:
     result = ''
     i = 0
@@ -50,7 +48,6 @@ def transliterate_latin_to_cyrillic(text: str) -> str:
             i += 1
     return result
 
-# --- Обратная транслитерация ---
 def transliterate_cyrillic_to_latin(text: str) -> str:
     cyr2lat = {v: k for k, v in latin_to_cyr.items()}
     result = ''
@@ -58,7 +55,6 @@ def transliterate_cyrillic_to_latin(text: str) -> str:
         result += cyr2lat.get(ch, ch)
     return result
 
-# --- Варианты транслитерации ---
 def transliterate(text: str, direction: str = 'lat2cyr') -> str:
     if direction == 'lat2cyr':
         return transliterate_latin_to_cyrillic(text)
@@ -66,8 +62,6 @@ def transliterate(text: str, direction: str = 'lat2cyr') -> str:
         return transliterate_cyrillic_to_latin(text)
     else:
         return text
-
-# --- Остальной код (обработка словаря, поиска, подсветки) ---
 
 CSV_ENCODING = "utf-8-sig"
 ADDITIONS_FILE = "additional_brands.json"
@@ -284,8 +278,8 @@ def run():
         unsafe_allow_html=True,
     )
 
-    # Загрузка словаря из файла
-    uploaded_dict_file = st.file_uploader("Загрузить файл словаря (JSON или CSV)", type=["json", "csv"])
+    # Загрузка словаря из файла (JSON, CSV, XLSX)
+    uploaded_dict_file = st.file_uploader("Загрузить файл словаря (JSON, CSV или XLSX)", type=["json", "csv", "xlsx"])
     if uploaded_dict_file:
         try:
             dict_bytes = uploaded_dict_file.read()
@@ -294,20 +288,21 @@ def run():
             elif uploaded_dict_file.name.lower().endswith(".csv"):
                 df_dict = pd.read_csv(io.StringIO(dict_bytes.decode("utf-8")))
                 loaded_dict = {str(k): str(v) for k, v in zip(df_dict.iloc[:,0], df_dict.iloc[:,1])}
+            elif uploaded_dict_file.name.lower().endswith(".xlsx"):
+                df_dict = pd.read_excel(io.BytesIO(dict_bytes), engine='openpyxl')
+                loaded_dict = {str(k): str(v) for k, v in zip(df_dict.iloc[:,0], df_dict.iloc[:,1])}
             else:
                 loaded_dict = {}
-            # Обновляем словарь
             if loaded_dict:
                 latin_to_cyr.update({k:v for k,v in loaded_dict.items()})
                 st.success("Словарь обновлён из файла.")
         except Exception as e:
             st.error(f"Ошибка при загрузке словаря: {e}")
 
-    # Редактирование словаря вручную (альтернатива experimental_data_editor)
+    # Редактирование словаря вручную через text_area
     st.subheader("Редактировать словарь вручную")
-    # Создаем текст для редактирования
     dict_text = "\n".join([f"{k},{v}" for k, v in latin_to_cyr.items()])
-    edited_text = st.text_area("Редактировать словарь (каждая строка: латиница,кириллица, через запятую)", value=dict_text, height=300)
+    edited_text = st.text_area("Редактировать словарь (каждая строка: латиница,кириллица)", value=dict_text, height=100)
 
     if st.button("Сохранить словарь"):
         new_dict = {}
@@ -317,15 +312,15 @@ def run():
                 if len(parts) == 2:
                     k, v = parts
                     new_dict[k.strip()] = v.strip()
-        # Обновляем словарь
         latin_to_cyr.clear()
         latin_to_cyr.update(new_dict)
-        # Сохраняем в файл
+        # Можно сохранить на диск
         with open("latin_to_cyr.json", "w", encoding="utf-8") as f:
             json.dump(latin_to_cyr, f, ensure_ascii=False, indent=2)
         st.success("Словарь сохранён.")
 
-    # --- Транслитерация с латиницы в кириллицу ---
+    # --- Остальной интерфейс (транслитерация, обработка файла) ---
+
     st.markdown(
         """
         <div style="background:linear-gradient(90deg,#4CAF50,#81C784);padding:16px;border-radius:8px;margin-top:20px">
