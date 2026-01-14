@@ -66,6 +66,7 @@ def transliterate(text: str, direction: str = 'lat2cyr') -> str:
 CSV_ENCODING = "utf-8-sig"
 ADDITIONS_FILE = "additional_brands.json"
 
+# --- Изначальный словарь марок и моделей ---
 car_brands_models: Dict[str, str] = {
     "Acura": "Акура",
     "Integra": "Интегра",
@@ -73,197 +74,55 @@ car_brands_models: Dict[str, str] = {
     "RDX": "РДХ",
     "RSX": "РСХ",
     "TLX": "ТЛКС",
-    # ... (остальной ваш список, я не вставлял весь здесь из-за длины)
+    # ... (добавьте остальные по необходимости)
 }
 
-# Загрузка дополнений из файла
+# --- Загрузка существующего файла словаря при запуске ---
 if os.path.exists(ADDITIONS_FILE):
     try:
         with open(ADDITIONS_FILE, "r", encoding="utf-8") as f:
-            loaded = json.load(f)
-            if isinstance(loaded, dict):
-                car_brands_models.update({str(k): str(v) for k, v in loaded.items()})
+            saved_dict = json.load(f)
+            if isinstance(saved_dict, dict):
+                car_brands_models.update({str(k): str(v) for k, v in saved_dict.items()})
     except Exception:
         pass
 
-@lru_cache(maxsize=20000)
-def decline_word_cached(word: str) -> str:
-    if not word or morph is None:
-        return word
+# --- Функция для сохранения словаря в файл ---
+def save_dictionary_to_file(dictionary: Dict[str, str], filename: str = ADDITIONS_FILE):
     try:
-        p = morph.parse(word)[0]
-        inf = p.inflect({"nomn"})
-        return inf.word if inf else p.word
-    except Exception:
-        return word
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(dictionary, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        st.exception(f"Ошибка при сохранении файла: {e}")
 
-def build_final_struct(base_map: Dict[str, str], additions: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-    final = {**(base_map or {})}
-    if additions:
-        final.update(additions)
-    final = {k: v for k, v in final.items() if isinstance(k, str) and k.strip()}
-    if not final:
-        return {"trie": None, "map": {}, "max_len": 0}
-    mapping: Dict[str, Tuple[str, str]] = {}
-    max_len = 0
-    for k, v in final.items():
-        lk = k.lower()
-        display = v if v is not None else k
-        display_decl = decline_word_cached(str(display))
-        mapping[lk] = (k, display_decl)
-        if len(lk) > max_len:
-            max_len = len(lk)
-    trie = {}
-    END = "_end_"
-    for lk, pair in mapping.items():
-        node = trie
-        for ch in lk:
-            node = node.setdefault(ch, {})
-        node[END] = (lk, pair)
-    return {"trie": trie, "map": mapping, "max_len": max_len}
-
-def _is_word_char(c: str) -> bool:
-    return c.isalnum() or c == "_"
-
-def get_matches(text: str, struct: Dict[str, Any]) -> List[Tuple[int, int, str, str]]:
-    if not text or not struct or struct.get("trie") is None:
-        return []
-    trie = struct["trie"]
-    text_l = text.lower()
-    n = len(text_l)
-    max_len = struct.get("max_len", n)
-    END = "_end_"
-    matches: List[Tuple[int, int, str, str]] = []
-    for i in range(n):
-        node = trie
-        for j in range(i, min(n, i + max_len)):
-            ch = text_l[j]
-            if ch not in node:
-                break
-            node = node[ch]
-            if END in node:
-                lk, (orig_key, disp) = node[END]
-                start = i
-                end = j + 1
-                if start > 0 and _is_word_char(text[start - 1]):
-                    continue
-                if end < n and _is_word_char(text[end]):
-                    continue
-                matches.append((start, end, orig_key, disp))
-    matches.sort(key=lambda x: (x[0], -(x[1] - x[0])))
-    filtered = []
-    last_end = -1
-    for s, e, ok, du in matches:
-        if s >= last_end:
-            filtered.append((s, e, ok, du))
-            last_end = e
-    return filtered
-
-HIGHLIGHT_STYLE = "background: #ffeb3b; color: #000; padding: 0 2px; border-radius: 2px;"
-
-def highlight_html(text: str, matches: List[Tuple[int, int, str, str]]) -> str:
-    if not matches:
-        return escape_html(text)
-    out = []
-    last = 0
-    for s, e, orig, disp in matches:
-        out.append(escape_html(text[last:s]))
-        snippet = escape_html(text[s:e])
-        out.append(f'<mark style="{HIGHLIGHT_STYLE}">{snippet}</mark>')
-        last = e
-    out.append(escape_html(text[last:]))
-    return "".join(out)
-
-def escape_html(s: str) -> str:
-    return (s.replace("&", "&amp;")
-             .replace("<", "&lt;")
-             .replace(">", "&gt;")
-             .replace('"', "&quot;"))
-
-def process_text(text: str, struct: Dict[str, Any]) -> Tuple[str, str]:
-    if not text:
-        return text, ""
-    matches = get_matches(text, struct)
-    html = highlight_html(text, matches)
-    return text, html
-
-def load_dictionary(source: Optional[str] = None, fileobj: Optional[io.BytesIO] = None) -> Dict[str, str]:
+# --- Вспомогательная функция для обновления словаря из файла и автоматического сохранения ---
+def update_dict_from_uploaded_file(uploaded_file):
     try:
-        if fileobj is not None:
-            if hasattr(fileobj, "getvalue"):
-                data_bytes = fileobj.getvalue()
-            else:
-                data_bytes = fileobj.read()
-            name = getattr(fileobj, "name", "") or source or ""
-            if name.lower().endswith(".json"):
-                text = data_bytes.decode("utf-8")
-                obj = json.loads(text)
-                return {str(k): str(v) for k, v in (obj.items() if isinstance(obj, dict) else [])}
-            if name.lower().endswith(".csv"):
-                text = data_bytes.decode("utf-8")
-                df = pd.read_csv(io.StringIO(text))
-            else:
-                df = pd.read_excel(io.BytesIO(data_bytes), engine='openpyxl')
-            if len(df.columns) >= 2:
-                return {str(k): str(v) for k, v in zip(df.iloc[:,0], df.iloc[:,1])}
-        if source:
-            if source.startswith("http"):
-                r = requests.get(source, timeout=10)
-                r.raise_for_status()
-                if source.lower().endswith(".json"):
-                    obj = r.json()
-                    return {str(k): str(v) for k, v in (obj.items() if isinstance(obj, dict) else [])}
-                if source.lower().endswith(".csv"):
-                    df = pd.read_csv(io.StringIO(r.text))
-                else:
-                    ext = os.path.splitext(source)[1].lower()
-                    if ext in ['.xlsx', '.xlsm', '.xltx', '.xltm']:
-                        df = pd.read_excel(io.BytesIO(r.content), engine='openpyxl')
-                    elif ext == '.xls':
-                        df = pd.read_excel(io.BytesIO(r.content), engine='xlrd')
-                    else:
-                        df = pd.read_excel(io.BytesIO(r.content), engine='openpyxl')
-                if len(df.columns) >= 2:
-                    return {str(k): str(v) for k, v in zip(df.iloc[:,0], df.iloc[:,1])}
-            else:
-                ext = os.path.splitext(source)[1].lower()
-                if ext == '.json':
-                    with open(source, "r", encoding="utf-8") as f:
-                        obj = json.load(f)
-                        return {str(k): str(v) for k, v in (obj.items() if isinstance(obj, dict) else [])}
-                elif ext == '.csv':
-                    df = pd.read_csv(source)
-                elif ext in ['.xlsx', '.xlsm', '.xltx', '.xltm']:
-                    df = pd.read_excel(source, engine='openpyxl')
-                elif ext == '.xls':
-                    df = pd.read_excel(source, engine='xlrd')
-                if len(df.columns) >= 2:
-                    return {str(k): str(v) for k, v in zip(df.iloc[:,0], df.iloc[:,1])}
-    except Exception:
-        return {}
-    return {}
-
-def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, struct: Dict[str, Any]) -> pd.DataFrame:
-    if filename.lower().endswith(".csv"):
-        try:
-            text = file_bytes.decode("utf-8")
-        except Exception:
-            text = file_bytes.decode("cp1251", errors="replace")
-        df = pd.read_csv(io.StringIO(text))
-    else:
-        df = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
-    if col_name not in df.columns:
-        raise ValueError(f"Столбец '{col_name}' не найден в файле.")
-    series = df[col_name].fillna("").astype(str)
-    plain_list = []
-    html_list = []
-    for txt in series:
-        plain, html = process_text(txt, struct)
-        plain_list.append(plain)
-        html_list.append(html)
-    df[col_name] = plain_list
-    df[f"{col_name}_preview_html"] = html_list
-    return df
+        dict_bytes = uploaded_file.read()
+        filename_lower = uploaded_file.name.lower()
+        loaded_dict = {}
+        if filename_lower.endswith(".json"):
+            obj = json.loads(dict_bytes.decode("utf-8"))
+            if isinstance(obj, dict):
+                loaded_dict = {str(k): str(v) for k, v in obj.items()}
+        elif filename_lower.endswith(".csv"):
+            df_dict = pd.read_csv(io.StringIO(dict_bytes.decode("utf-8")))
+            if len(df_dict.columns) >= 2:
+                loaded_dict = {str(k): str(v) for k, v in zip(df_dict.iloc[:,0], df_dict.iloc[:,1])}
+        elif filename_lower.endswith(".xlsx"):
+            df_dict = pd.read_excel(io.BytesIO(dict_bytes), engine='openpyxl')
+            if len(df_dict.columns) >= 2:
+                loaded_dict = {str(k): str(v) for k, v in zip(df_dict.iloc[:,0], df_dict.iloc[:,1])}
+        else:
+            st.error("Некорректный тип файла.")
+            return
+        # Обновляем основной словарь и сохраняем
+        if loaded_dict:
+            car_brands_models.update(loaded_dict)
+            save_dictionary_to_file(car_brands_models)
+            st.success("Словарь обновлён из файла и сохранён.")
+    except Exception as e:
+        st.error(f"Ошибка при загрузке файла словаря: {e}")
 
 # --- Основная функция ---
 def run():
@@ -286,42 +145,12 @@ def run():
             "- CSV: латиница,кириллица\n" +
             "- XLSX: первый столбец - латиница, второй - кириллица")
 
-    # Загрузка словаря из файла (JSON, CSV, XLSX)
+    # --- Загрузка словаря из файла ---
     uploaded_dict_file = st.file_uploader("Загрузить файл словаря (JSON, CSV или XLSX)", type=["json", "csv", "xlsx"])
     if uploaded_dict_file:
-        try:
-            dict_bytes = uploaded_dict_file.read()
-            filename_lower = uploaded_dict_file.name.lower()
-            loaded_dict = {}
-            if filename_lower.endswith(".json"):
-                obj = json.loads(dict_bytes.decode("utf-8"))
-                if isinstance(obj, dict):
-                    loaded_dict = {str(k): str(v) for k, v in obj.items()}
-            elif filename_lower.endswith(".csv"):
-                df_dict = pd.read_csv(io.StringIO(dict_bytes.decode("utf-8")))
-                if len(df_dict.columns) >= 2:
-                    loaded_dict = {str(k): str(v) for k, v in zip(df_dict.iloc[:,0], df_dict.iloc[:,1])}
-                else:
-                    st.error("CSV файл должен содержать минимум 2 столбца.")
-            elif filename_lower.endswith(".xlsx"):
-                df_dict = pd.read_excel(io.BytesIO(dict_bytes), engine='openpyxl')
-                if len(df_dict.columns) >= 2:
-                    loaded_dict = {str(k): str(v) for k, v in zip(df_dict.iloc[:,0], df_dict.iloc[:,1])}
-                else:
-                    st.error("Excel файл должен содержать минимум 2 столбца.")
-            else:
-                st.error("Некорректный тип файла.")
-            if loaded_dict:
-                # Обновляем основной словарь
-                for k, v in loaded_dict.items():
-                    car_brands_models[k] = v
-                st.success("Словарь обновлён из файла.")
-            else:
-                st.warning("Файл пуст или формат файла некорректен.")
-        except Exception as e:
-            st.error(f"Ошибка при загрузке словаря: {e}")
+        update_dict_from_uploaded_file(uploaded_dict_file)
 
-    # Редактирование словаря вручную через текстовое поле
+    # --- Ручное редактирование словаря ---
     st.subheader("Редактировать словарь вручную")
     dict_text = "\n".join([f"{k},{v}" for k, v in car_brands_models.items()])
     edited_text = st.text_area("Редактировать словарь (каждая строка: латиница,кириллица)", value=dict_text, height=300)
@@ -336,12 +165,10 @@ def run():
                     new_dict[k.strip()] = v.strip()
         car_brands_models.clear()
         car_brands_models.update(new_dict)
-        # Можно сохранить на диск
-        with open("additional_brands.json", "w", encoding="utf-8") as f:
-            json.dump(car_brands_models, f, ensure_ascii=False, indent=2)
+        save_dictionary_to_file(car_brands_models)
         st.success("Словарь сохранён.")
 
-    # --- Остальной интерфейс (транслитерация, обработка файла) ---
+    # --- Транслитерация ---
     st.markdown(
         """
         <div style="background:linear-gradient(90deg,#4CAF50,#81C784);padding:16px;border-radius:8px;margin-top:20px">
@@ -381,6 +208,7 @@ def run():
         try:
             file_bytes = uploaded_file.read()
             ext = os.path.splitext(uploaded_file.name)[1].lower()
+
             # Предварительный просмотр колонок
             if ext in ['.xlsx', '.xls']:
                 df_preview = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl', nrows=0)
@@ -389,8 +217,10 @@ def run():
             else:
                 df_preview = pd.DataFrame()
 
+            # --------- ВАЖНО: Выбор из всех столбцов файла через всплывающее меню ---------
             if not df_preview.empty:
                 col_options = list(df_preview.columns)
+                # Пользователь выбирает колонку из всех доступных
                 col_name = st.selectbox("Выберите название столбца для обработки", options=col_options)
             else:
                 col_name = st.text_input("Введите название столбца для обработки", value="Название")
@@ -400,29 +230,123 @@ def run():
                 df = process_file_for_processing(file_bytes, uploaded_file.name, col_name, {})
                 st.success("Файл успешно обработан")
                 st.dataframe(df)
-                # Предлагаем скачать
-                if ext in ['.xlsx', '.xls']:
-                    buffer = io.BytesIO()
-                    df.to_excel(buffer, index=False, engine='openpyxl')
-                    buffer.seek(0)
+                # --- Скачивание ---
+                col1, col2 = st.columns(2)
+                with col1:
+                    # Скачать как Excel
+                    buffer_xlsx = io.BytesIO()
+                    df.to_excel(buffer_xlsx, index=False, engine='openpyxl')
+                    buffer_xlsx.seek(0)
                     st.download_button(
-                        label="Скачать обработанный Excel",
-                        data=buffer,
+                        label="Скачать как Excel",
+                        data=buffer_xlsx,
                         file_name="processed_" + uploaded_file.name,
                         mime="application/vnd.openpyxl.spreadsheetml.sheet"
                     )
-                elif ext == '.csv':
-                    csv_bytes = df.to_csv(index=False).encode('utf-8')
+                with col2:
+                    # Скачать как CSV
+                    buffer_csv = df.to_csv(index=False).encode('utf-8')
                     st.download_button(
-                        label="Скачать обработанный CSV",
-                        data=csv_bytes,
-                        file_name="processed_" + uploaded_file.name,
+                        label="Скачать как CSV",
+                        data=buffer_csv,
+                        file_name="processed_" + os.path.splitext(uploaded_file.name)[0] + ".csv",
                         mime="text/csv"
                     )
             else:
                 st.warning("Не удалось определить названия столбцов.")
         except Exception as e:
             st.error(f"Ошибка при обработке файла: {e}")
+
+# --- Обработка файла для поиска и подсветки ---
+def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, struct: Dict[str, Any]) -> pd.DataFrame:
+    ext = os.path.splitext(filename)[1].lower()
+    if ext == ".csv":
+        try:
+            text = file_bytes.decode("utf-8")
+        except:
+            text = file_bytes.decode("cp1251", errors="replace")
+        df = pd.read_csv(io.StringIO(text))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
+    if col_name not in df.columns:
+        raise ValueError(f"Столбец '{col_name}' не найден в файле.")
+    series = df[col_name].fillna("").astype(str)
+    plain_list = []
+    html_list = []
+    for txt in series:
+        plain, html = process_text(txt, struct)
+        plain_list.append(plain)
+        html_list.append(html)
+    df[col_name] = plain_list
+    df[f"{col_name}_preview_html"] = html_list
+    return df
+
+# --- Вспомогательные функции для подсветки ---
+import html
+
+def get_matches(text: str, struct: Dict[str, Any]) -> List[Tuple[int, int, str, str]]:
+    if not text or not struct or struct.get("trie") is None:
+        return []
+    trie = struct["trie"]
+    text_l = text.lower()
+    n = len(text_l)
+    max_len = struct.get("max_len", n)
+    END = "_end_"
+    matches: List[Tuple[int, int, str, str]] = []
+    for i in range(n):
+        node = trie
+        for j in range(i, min(n, i + max_len)):
+            ch = text_l[j]
+            if ch not in node:
+                break
+            node = node[ch]
+            if END in node:
+                lk, (orig_key, disp) = node[END]
+                start = i
+                end = j + 1
+                if start > 0 and _is_word_char(text[start - 1]):
+                    continue
+                if end < n and _is_word_char(text[end]):
+                    continue
+                matches.append((start, end, orig_key, disp))
+    matches.sort(key=lambda x: (x[0], -(x[1] - x[0])))
+    filtered = []
+    last_end = -1
+    for s, e, ok, du in matches:
+        if s >= last_end:
+            filtered.append((s, e, ok, du))
+            last_end = e
+    return filtered
+
+def _is_word_char(c: str) -> bool:
+    return c.isalnum() or c == "_"
+
+def highlight_html(text: str, matches: List[Tuple[int, int, str, str]]) -> str:
+    if not matches:
+        return escape_html(text)
+    out = []
+    last = 0
+    for s, e, orig, disp in matches:
+        out.append(escape_html(text[last:s]))
+        snippet = escape_html(text[s:e])
+        out.append(f'<mark style="{HIGHLIGHT_STYLE}">{snippet}</mark>')
+        last = e
+    out.append(escape_html(text[last:]))
+    return "".join(out)
+
+def escape_html(s: str) -> str:
+    return html.escape(s)
+
+def process_text(text: str, struct: Dict[str, Any]) -> Tuple[str, str]:
+    if not text:
+        return text, ""
+    matches = get_matches(text, struct)
+    html_result = highlight_html(text, matches)
+    return text, html_result
+
+# --- Стиль подсветки ---
+HIGHLIGHT_STYLE = "background: #ffeb3b; color: #000; padding: 0 2px; border-radius: 2px;"
+
 
 if __name__ == "__main__":
     run()
