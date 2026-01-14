@@ -203,9 +203,9 @@ def process_text_fast_optimized(text: str, struct: Dict[str, Any]) -> str:
 def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, struct: Dict[str, Any]) -> pd.DataFrame:
     file_stream = io.BytesIO(file_bytes)
     if filename.lower().endswith('.xlsx'):
-        df = pd.read_excel(file_stream)
+        df = pd.read_excel(file_stream, engine='openpyxl')
     else:
-        df = pd.read_csv(io.BytesIO(file_bytes), encoding=CSV_ENCODING)
+        df = pd.read_excel(file_stream, engine='xlrd')
     if col_name not in df.columns:
         raise ValueError(f"Столбец '{col_name}' не найден в файле")
     df[col_name] = df[col_name].astype(str).apply(lambda x: process_text_fast_optimized(x, struct))
@@ -220,6 +220,9 @@ def run():
     # Инициализация базового словаря
     global base_dict
     base_dict = car_brands_models.copy()
+
+    # Обновляем структуру поиска
+    update_search_struct(base_dict)
 
     # Раздел: Настройки словаря
     with st.expander("🛠️ Настройки словаря", expanded=True):
@@ -271,7 +274,7 @@ def run():
         if uploaded_file and not col_name:
             try:
                 if uploaded_file.name.lower().endswith('.xlsx'):
-                    df_preview = pd.read_excel(uploaded_file, nrows=0)
+                    df_preview = pd.read_excel(uploaded_file, nrows=0, engine='openpyxl')
                 else:
                     df_preview = pd.read_csv(uploaded_file, nrows=0)
                 if hasattr(df_preview, 'columns'):
@@ -291,7 +294,7 @@ def run():
                 buf_xlsx = io.BytesIO()
                 buf_csv = io.BytesIO()
                 if uploaded_file.name.lower().endswith('.xlsx'):
-                    df_result.to_excel(buf_xlsx, index=False)
+                    df_result.to_excel(buf_xlsx, index=False, engine='openpyxl')
                     buf_xlsx.seek(0)
                     st.download_button("⬇️ Скачать XLSX", buf_xlsx, file_name="result.xlsx",
                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
