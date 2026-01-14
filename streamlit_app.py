@@ -8,6 +8,7 @@ from typing import Dict, Any, List, Tuple, Optional
 import pandas as pd
 import requests
 import streamlit as st
+import html
 
 # Необязательный морфологический анализатор
 try:
@@ -74,6 +75,9 @@ car_brands_models: Dict[str, str] = {
     "RDX": "РДХ",
     "RSX": "РСХ",
     "TLX": "ТЛКС",
+    "MITSUBISHI": "Митсубиши",
+    "Pajero": "Паджеро",
+    "Montero": "Монтеро",
     # ... (добавьте остальные по необходимости)
 }
 
@@ -168,6 +172,9 @@ def run():
         save_dictionary_to_file(car_brands_models)
         st.success("Словарь сохранён.")
 
+    # --- Опция поиска по транслиту ---
+    translit_enabled = st.checkbox("Искать и по транслиту", value=True)
+
     # --- Транслитерация ---
     st.markdown(
         """
@@ -220,20 +227,18 @@ def run():
             # --------- ВАЖНО: Выбор из всех столбцов файла через всплывающее меню ---------
             if not df_preview.empty:
                 col_options = list(df_preview.columns)
-                # Пользователь выбирает колонку из всех доступных
                 col_name = st.selectbox("Выберите название столбца для обработки", options=col_options)
             else:
                 col_name = st.text_input("Введите название столбца для обработки", value="Название")
             
             if col_name:
                 # Обработка файла полностью
-                df = process_file_for_processing(file_bytes, uploaded_file.name, col_name, {})
+                df = process_file_for_processing(file_bytes, uploaded_file.name, col_name, car_brands_models, translit_enabled)
                 st.success("Файл успешно обработан")
                 st.dataframe(df)
                 # --- Скачивание ---
                 col1, col2 = st.columns(2)
                 with col1:
-                    # Скачать как Excel
                     buffer_xlsx = io.BytesIO()
                     df.to_excel(buffer_xlsx, index=False, engine='openpyxl')
                     buffer_xlsx.seek(0)
@@ -244,7 +249,6 @@ def run():
                         mime="application/vnd.openpyxl.spreadsheetml.sheet"
                     )
                 with col2:
-                    # Скачать как CSV
                     buffer_csv = df.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         label="Скачать как CSV",
@@ -257,15 +261,8 @@ def run():
         except Exception as e:
             st.error(f"Ошибка при обработке файла: {e}")
 
-# --- Вспомогательные функции для подсветки и обработки ---
-def process_text(text: str, struct: Dict[str, Any]) -> Tuple[str, str]:
-    if not text:
-        return text, ""
-    matches = get_matches(text, struct)
-    html_result = highlight_html(text, matches)
-    return text, html_result
-
-def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, struct: Dict[str, Any]) -> pd.DataFrame:
+# --- Обновленная функция обработки файла ---
+def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, dict_brands_models: Dict[str, str], translit_enabled: bool) -> pd.DataFrame:
     ext = os.path.splitext(filename)[1].lower()
     if ext == ".csv":
         try:
@@ -278,18 +275,80 @@ def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str,
     if col_name not in df.columns:
         raise ValueError(f"Столбец '{col_name}' не найден в файле.")
     series = df[col_name].fillna("").astype(str)
+
     plain_list = []
     html_list = []
+
     for txt in series:
-        plain, html = process_text(txt, struct)
+        plain, html = process_text(txt, {}, dict_brands_models, translit_enabled)
         plain_list.append(plain)
         html_list.append(html)
+
     df[col_name] = plain_list
     df[f"{col_name}_preview_html"] = html_list
     return df
 
-import html
+# --- Обработка текста с поиском слов и подсветкой ---
+def process_text(
+    text: str,
+    struct: Dict,
+    dict_brands_models: Dict[str, str],
+    translit_enabled: bool
+) -> Tuple[str, str]:
+    """
+    Обрабатывает текст, ищет слова из словаря и транслитерации.
+    Возвращает исходный текст и строку с подсветкой и переводом.
+    """
+    if not text:
+        return text, ""
 
+    search_terms = list(dict_brands_models.keys())
+
+    # Создаем список вариантов для поиска
+    texts_for_search = [text]
+    if translit_enabled:
+        translit_text = transliterate(text, 'lat2cyr')
+        texts_for_search.append(translit_text)
+
+    matches_info = []
+
+    # Ищем слова в оригинальном и транслите
+    lower_texts = [t.lower() for t in texts_for_search]
+    for idx, t in enumerate(lower_texts):
+        for word in search_terms:
+            word_lower = word.lower()
+            start_idx = t.find(word_lower)
+            if start_idx != -1:
+                end_idx = start_idx + len(word_lower)
+                # Подбираем соответствующую позицию в исходном тексте
+                # Для простоты берем из оригинального текста
+                start_in_orig = None
+                end_in_orig = None
+                if idx == 0:
+                    start_in_orig = start_idx
+                    end_in_orig = end_idx
+                else:
+                    # В случае транслита, ищем по исходному
+                    # Можно усложнить, если нужно более точно
+                    start_in_orig = start_idx
+                    end_in_orig = end_idx
+                orig_substring = text[start_in_orig:end_in_orig]
+                translation = dict_brands_models.get(word, "")
+                matches_info.append((start_in_orig, end_in_orig, orig_substring, translation))
+
+    # Формируем подсветку
+    html = highlight_html(text, matches_info)
+
+    # Формируем итоговую строку
+    if matches_info:
+        translations = " / ".join({info[3] for info in matches_info})
+        result_str = f"{text} - ({translations})"
+    else:
+        result_str = text
+
+    return result_str, html
+
+# --- Вспомогательные функции для подсветки ---
 def get_matches(text: str, struct: Dict[str, Any]) -> List[Tuple[int, int, str, str]]:
     if not text or not struct or struct.get("trie") is None:
         return []
@@ -315,6 +374,7 @@ def get_matches(text: str, struct: Dict[str, Any]) -> List[Tuple[int, int, str, 
                 if end < n and _is_word_char(text[end]):
                     continue
                 matches.append((start, end, orig_key, disp))
+    # Убираем пересекающиеся
     matches.sort(key=lambda x: (x[0], -(x[1] - x[0])))
     filtered = []
     last_end = -1
@@ -329,19 +389,16 @@ def _is_word_char(c: str) -> bool:
 
 def highlight_html(text: str, matches: List[Tuple[int, int, str, str]]) -> str:
     if not matches:
-        return escape_html(text)
+        return html.escape(text)
     out = []
     last = 0
     for s, e, orig, disp in matches:
-        out.append(escape_html(text[last:s]))
-        snippet = escape_html(text[s:e])
+        out.append(html.escape(text[last:s]))
+        snippet = html.escape(text[s:e])
         out.append(f'<mark style="{HIGHLIGHT_STYLE}">{snippet}</mark>')
         last = e
-    out.append(escape_html(text[last:]))
+    out.append(html.escape(text[last:]))
     return "".join(out)
-
-def escape_html(s: str) -> str:
-    return html.escape(s)
 
 HIGHLIGHT_STYLE = "background: #ffeb3b; color: #000; padding: 0 2px; border-radius: 2px;"
 
