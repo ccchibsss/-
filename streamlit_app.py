@@ -1,24 +1,26 @@
-# !/usr/bin/env python3
+#!/usr/bin/env python3
+# Улучшенное, оптимизированное и более красочное приложение Streamlit для замены и предварительного просмотра брендов/моделей авто
 import io
 import os
 import json
-import requests
-import pandas as pd
 from functools import lru_cache
-from typing import Dict, Tuple, Any, List, Optional
+from typing import Dict, Any, List, Tuple, Optional
 
+import pandas as pd
+import requests
 import streamlit as st
 
+# Необязательный морфологический анализатор (если есть — используется для склонения)
 try:
     import pymorphy2
     morph = pymorphy2.MorphAnalyzer()
-except ImportError:
+except Exception:
     morph = None
 
 CSV_ENCODING = "utf-8-sig"
 ADDITIONS_FILE = "additional_brands.json"
 
-# Изначальный встроенный словарь
+# Исходный словарь брендов и моделей (может быть расширен пользователем)
 car_brands_models: Dict[str, str] = {
     "Toyota": "Toyota",
     "Honda": "Honda",
@@ -27,7 +29,7 @@ car_brands_models: Dict[str, str] = {
     "Kia": "Kia",
 }
 
-# Загрузка дополнений
+# Загрузка сохранённых дополнений, если есть
 if os.path.exists(ADDITIONS_FILE):
     try:
         with open(ADDITIONS_FILE, "r", encoding="utf-8") as f:
@@ -37,8 +39,9 @@ if os.path.exists(ADDITIONS_FILE):
     except Exception:
         pass
 
-@lru_cache(maxsize=10000)
+@lru_cache(maxsize=20000)
 def decline_word_cached(word: str) -> str:
+    """Возвращает склонённое слово в именительном падеже (если есть pymorphy2)."""
     if not word or morph is None:
         return word
     try:
@@ -48,78 +51,35 @@ def decline_word_cached(word: str) -> str:
     except Exception:
         return word
 
-def load_dictionary(source: Optional[str]=None, fileobj: Optional[io.BytesIO]=None) -> Dict[str, str]:
-    result: Dict[str, str] = {}
-    try:
-        if fileobj:
-            if source and source.lower().endswith('.json'):
-                content = fileobj.getvalue().decode('utf-8')
-                data = json.loads(content)
-                if isinstance(data, dict):
-                    result = data
-            elif source and source.lower().endswith(('.csv', '.xls', '.xlsx')):
-                if source.lower().endswith('.csv'):
-                    df = pd.read_csv(fileobj)
-                else:
-                    df = pd.read_excel(fileobj)
-                if len(df.columns) >= 2:
-                    result = dict(zip(df.iloc[:, 0], df.iloc[:, 1]))
-        elif source:
-            if source.startswith('http'):
-                resp = requests.get(source, timeout=10)
-                if source.lower().endswith('.json'):
-                    data = resp.json()
-                    if isinstance(data, dict):
-                        result = data
-                else:
-                    if source.lower().endswith('.csv'):
-                        df = pd.read_csv(io.StringIO(resp.text))
-                    else:
-                        df = pd.read_excel(io.BytesIO(resp.content))
-                    if len(df.columns) >= 2:
-                        result = dict(zip(df.iloc[:, 0], df.iloc[:, 1]))
-            else:
-                if source.lower().endswith('.json'):
-                    with open(source, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                        if isinstance(data, dict):
-                            result = data
-                elif source.lower().endswith('.csv'):
-                    df = pd.read_csv(source)
-                    if len(df.columns) >= 2:
-                        result = dict(zip(df.iloc[:, 0], df.iloc[:, 1]))
-                else:
-                    df = pd.read_excel(source)
-                    if len(df.columns) >= 2:
-                        result = dict(zip(df.iloc[:, 0], df.iloc[:, 1]))
-        return {str(k): str(v) for k, v in result.items()}
-    except Exception:
-        return {}
-
-search_struct = None
-
-def update_search_struct(base_dict=None):
-    global search_struct
-    if base_dict is None:
-        base_dict = car_brands_models
-    search_struct = build_final_struct_fast(base_dict, {})
-
-def build_final_struct_fast(base_map: Dict[str, str], additions: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-    final_map = {**base_map}
+# ---------------- ПостроениеTrie и быстрый поиск ----------------
+def build_final_struct(base_map: Dict[str, str], additions: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """
+    Строит структуру trie и метаданные для быстрого поиска подстрок (без учёта регистра).
+    Возвращает словарь с trie, отображением и максимальной длиной поиска.
+    """
+    final = {**(base_map or {})}
     if additions:
-        final_map.update(additions)
-    final_map = {k: v for k, v in final_map.items() if isinstance(k, str) and k.strip()}
-    if not final_map:
-        return {"engine": None, "map": {}, "max_len": 0, "use_aho": False}
+        final.update(additions)
+
+    # Убираем пустые или некорректные ключи
+    final = {k: v for k, v in final.items() if isinstance(k, str) and k.strip()}
+
+    if not final:
+        return {"trie": None, "map": {}, "max_len": 0}
+
     mapping: Dict[str, Tuple[str, str]] = {}
     max_len = 0
-    for k, v in final_map.items():
+
+    # Создаём отображение по нижнему регистру
+    for k, v in final.items():
         lk = k.lower()
-        ru = v if v is not None else k
-        ru_decl = decline_word_cached(str(ru))
-        mapping[lk] = (k, ru_decl)
+        display = v if v is not None else k
+        display_decl = decline_word_cached(str(display))
+        mapping[lk] = (k, display_decl)
         if len(lk) > max_len:
             max_len = len(lk)
+
+    # Строим trie
     trie = {}
     END = "_end_"
     for lk, pair in mapping.items():
@@ -127,183 +87,298 @@ def build_final_struct_fast(base_map: Dict[str, str], additions: Optional[Dict[s
         for ch in lk:
             node = node.setdefault(ch, {})
         node[END] = (lk, pair)
-    return {"engine": trie, "map": mapping, "max_len": max_len, "use_aho": False}
+
+    return {"trie": trie, "map": mapping, "max_len": max_len}
+
+def _is_word_char(c: str) -> bool:
+    """Проверка, является ли символ частью слова."""
+    return c.isalnum() or c == "_"
 
 def get_matches(text: str, struct: Dict[str, Any]) -> List[Tuple[int, int, str, str]]:
-    if not text or not struct or struct["engine"] is None:
+    """
+    Находит все совпадения в тексте по trie.
+    Возвращает список кортежей: (start_idx, end_idx_невключительно, оригинальный_ключ, отображение).
+    Соблюдаются границы слова, совпадение не должно быть внутри другого слова.
+    """
+    if not text or not struct or struct.get("trie") is None:
         return []
-    return _find_matches_trie(text, struct)
 
-def _find_matches_trie(text: str, struct: Dict[str, Any]) -> List[Tuple[int, int, str, str]]:
-    trie = struct["engine"]
+    trie = struct["trie"]
     text_l = text.lower()
     n = len(text_l)
-    max_len = struct["max_len"]
-    matches: List[Tuple[int, int, str, str]] = []
+    max_len = struct.get("max_len", n)
     END = "_end_"
+    matches: List[Tuple[int, int, str, str]] = []
+
     for i in range(n):
         node = trie
-        j = i
-        while j < n and (j - i) < max_len and text_l[j] in node:
-            node = node[text_l[j]]
+        for j in range(i, min(n, i + max_len)):
+            ch = text_l[j]
+            if ch not in node:
+                break
+            node = node[ch]
             if END in node:
-                lk, (orig_key, ru_decl) = node[END]
-                start_idx = i
-                end_idx = j
+                lk, (orig_key, disp) = node[END]
+                start = i
+                end = j + 1  # исключение
                 # Проверка границ слова
-                if start_idx > 0 and _is_word_char(text_l[start_idx - 1]):
-                    pass
-                elif end_idx + 1 < n and _is_word_char(text[start_idx - 1]):
-                    pass
-                else:
-                    matches.append((start_idx, end_idx, orig_key, ru_decl))
-            j += 1
-    if not matches:
-        return []
+                if start > 0 and _is_word_char(text[start - 1]):
+                    continue
+                if end < n and _is_word_char(text[end]):
+                    continue
+                matches.append((start, end, orig_key, disp))
+    # Сортировка и фильтрация перекрывающихся совпадений
     matches.sort(key=lambda x: (x[0], -(x[1] - x[0])))
     filtered = []
     last_end = -1
-    for s, e, ok, ru in matches:
-        if s > last_end:
-            filtered.append((s, e, ok, ru))
+    for s, e, ok, du in matches:
+        if s >= last_end:
+            filtered.append((s, e, ok, du))
             last_end = e
     return filtered
 
-def _is_word_char(c):
-    return c.isalnum() or c == "_"
+# ---------------- Визуализация и подсветка ----------------
+HIGHLIGHT_STYLE = 'background:#ffd54f;color:#000;border-radius:4px;padding:1px 4px;'
 
-def contains_latin(text: str) -> bool:
-    return any('a' <= ch.lower() <= 'z' for ch in text)
-
-def contains_cyrillic(text: str) -> bool:
-    return any('а' <= ch.lower() <= 'я' or 'ё' <= ch.lower() <= 'ё' for ch in text)
-
-def latin_to_cyrillic(text: str) -> str:
-    # Можно реализовать транслитерацию, если нужно
-    return text
-
-def process_text_fast_optimized(text: str, struct: Dict[str, Any]) -> str:
-    if not text or not struct or struct["engine"] is None:
-        return text
-    matches = get_matches(text, struct)
+def highlight_html(text: str, matches: List[Tuple[int, int, str, str]]) -> str:
+    """Возвращает HTML с подсвеченными совпадениями."""
     if not matches:
-        return text
-    result = []
-    last_idx = 0
-    for s, e, ok, ru in matches:
-        if s > last_idx:
-            result.append(text[last_idx:s])
-        matched_text = text[s:e+1]
-        result.append(f"{matched_text}")  # Можно изменить оформление
-        last_idx = e + 1
-    if last_idx < len(text):
-        result.append(text[last_idx:])
-    return "".join(result)
+        return escape_html(text)
+    out = []
+    last = 0
+    for s, e, orig, disp in matches:
+        out.append(escape_html(text[last:s]))
+        snippet = escape_html(text[s:e])
+        out.append(f'<mark style="{HIGHLIGHT_STYLE}">{snippet}</mark>')
+        last = e
+    out.append(escape_html(text[last:]))
+    return "".join(out)
 
+def escape_html(s: str) -> str:
+    """Экранирование специальных HTML символов."""
+    return (s.replace("&", "&amp;")
+             .replace("<", "&lt;")
+             .replace(">", "&gt;")
+             .replace('"', "&quot;"))
+
+def process_text(text: str, struct: Dict[str, Any]) -> Tuple[str, str]:
+    """
+    Обрабатывает текст:
+    - возвращает (обычный_текст, html_подсветка)
+    """
+    if not text:
+        return text, ""
+    matches = get_matches(text, struct)
+    html = highlight_html(text, matches)
+    # Можно заменить совпадения на нормализованные формы, если нужно
+    return text, html
+
+# ---------------- Загрузка словарей ----------------
+def load_dictionary(source: Optional[str] = None, fileobj: Optional[io.BytesIO] = None) -> Dict[str, str]:
+    """
+    Загружает словарь из файла (upload), URL или файла.
+    Поддерживаются форматы JSON, CSV, Excel.
+    """
+    try:
+        if fileobj is not None:
+            # преобразуем в BytesIO
+            if hasattr(fileobj, "read"):
+                data = fileobj.read()
+                b = io.BytesIO(data)
+                name = getattr(fileobj, "name", "") or source or ""
+            else:
+                b = fileobj
+                name = source or ""
+            if name.lower().endswith(".json"):
+                text = b.getvalue().decode("utf-8")
+                obj = json.loads(text)
+                return {str(k): str(v) for k, v in (obj.items() if isinstance(obj, dict) else [])}
+            if name.lower().endswith(".csv"):
+                df = pd.read_csv(b)
+            else:
+                df = pd.read_excel(b)
+            if len(df.columns) >= 2:
+                return {str(k): str(v) for k, v in zip(df.iloc[:, 0], df.iloc[:, 1])}
+            return {}
+        if source:
+            if source.startswith("http"):
+                r = requests.get(source, timeout=10)
+                r.raise_for_status()
+                if source.lower().endswith(".json"):
+                    obj = r.json()
+                    return {str(k): str(v) for k, v in (obj.items() if isinstance(obj, dict) else [])}
+                if source.lower().endswith(".csv"):
+                    df = pd.read_csv(io.StringIO(r.text))
+                else:
+                    df = pd.read_excel(io.BytesIO(r.content))
+                if len(df.columns) >= 2:
+                    return {str(k): str(v) for k, v in zip(df.iloc[:, 0], df.iloc[:, 1])}
+            else:
+                # локальный файл
+                if source.lower().endswith(".json"):
+                    with open(source, "r", encoding="utf-8") as f:
+                        obj = json.load(f)
+                        return {str(k): str(v) for k, v in (obj.items() if isinstance(obj, dict) else [])}
+                if source.lower().endswith(".csv"):
+                    df = pd.read_csv(source)
+                else:
+                    df = pd.read_excel(source)
+                if len(df.columns) >= 2:
+                    return {str(k): str(v) for k, v in zip(df.iloc[:, 0], df.iloc[:, 1])}
+    except Exception:
+        return {}
+    return {}
+
+# ---------------- Обработка файла для поиска ----------------
 def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, struct: Dict[str, Any]) -> pd.DataFrame:
-    file_stream = io.BytesIO(file_bytes)
-    if filename.lower().endswith('.xlsx'):
-        df = pd.read_excel(file_stream, engine='openpyxl')
+    """
+    Загружает файл, обрабатывает указанный столбец, добавляя колонку с подсветкой.
+    Возвращает DataFrame с новым столбцом для HTML-превью.
+    """
+    stream = io.BytesIO(file_bytes)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(stream)
     else:
-        df = pd.read_excel(file_stream, engine='xlrd')
+        df = pd.read_excel(stream)
+
     if col_name not in df.columns:
-        raise ValueError(f"Столбец '{col_name}' не найден в файле")
-    df[col_name] = df[col_name].astype(str).apply(lambda x: process_text_fast_optimized(x, struct))
+        raise ValueError(f"Столбец '{col_name}' не найден в файле.")
+
+    # Обработка текста в столбце
+    series = df[col_name].fillna("").astype(str)
+    plain_list = []
+    html_list = []
+
+    for txt in series:
+        plain, html = process_text(txt, struct)
+        plain_list.append(plain)
+        html_list.append(html)
+
+    df[col_name] = plain_list
+    preview_col = f"{col_name}_preview_html"
+    df[preview_col] = html_list
+
     return df
 
-# Основная функция с улучшенным оформлением
+# ---------------- UI Streamlit ----------------
 def run():
-    st.set_page_config(page_title="Обработка данных", layout="wide")
-    st.title("🚗 Обработка данных и расширение словаря")
-    st.markdown("---")
-    
-    # Инициализация базового словаря
-    global base_dict
+    # Настройка страницы
+    st.set_page_config(page_title="🚗 Обработка брендов/моделей", layout="wide")
+    st.markdown(
+        """
+        <div style="background:linear-gradient(90deg,#2196F3,#21CBF3);padding:16px;border-radius:8px">
+        <h2 style="color:white;margin:0">🚗 Обработка данных и расширение словаря</h2>
+        <p style="color:rgba(255,255,255,0.9);margin:4px 0 0">Быстрая подстановка и визуальный просмотр совпадений</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.write("")  # отступ
+
+    # Локальный базовый словарь (можно редактировать)
     base_dict = car_brands_models.copy()
+    struct = build_final_struct(base_dict)
 
-    # Обновляем структуру поиска
-    update_search_struct(base_dict)
-
-    # Раздел: Настройки словаря
+    # Боковая панель: управление словарём
     with st.expander("🛠️ Настройки словаря", expanded=True):
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            dict_file = st.file_uploader("📁 Загрузить файл словаря", type=["json", "csv", "xls", "xlsx"])
-            dict_url = st.text_input("🌐 Или ввести URL файла словаря")
-            if st.button("🔄 Обновить словарь"):
-                with st.spinner("Загружаем словарь..."):
+        left, right = st.columns([2, 1])
+        with left:
+            uploaded_dict = st.file_uploader("📁 Загрузить файл словаря (json/csv/xlsx)", type=["json", "csv", "xls", "xlsx"])
+            dict_url = st.text_input("🌐 Или указать URL (json/csv/xlsx)")
+            if st.button("🔄 Загрузить/Обновить словарь"):
+                with st.spinner("Загрузка..."):
                     loaded = {}
-                    if dict_file:
-                        try:
-                            loaded = load_dictionary(source=dict_file.name, fileobj=dict_file)
-                        except:
-                            st.error("Ошибка при загрузке файла")
-                    elif dict_url:
-                        try:
+                    try:
+                        if uploaded_dict:
+                            loaded = load_dictionary(source=uploaded_dict.name, fileobj=uploaded_dict)
+                        elif dict_url:
                             loaded = load_dictionary(source=dict_url)
-                        except:
-                            st.error("Ошибка при загрузке по URL")
-                    if loaded:
-                        base_dict.update(loaded)
-                        with open(ADDITIONS_FILE, "w", encoding="utf-8") as f:
-                            json.dump({str(k): str(v) for k, v in base_dict.items()}, f, ensure_ascii=False, indent=2)
-                        update_search_struct(base_dict)
-                        st.success(f"Обновлено {len(loaded)} пар слов")
-        with col2:
-            st.markdown("#### Текущий словарь")
-            df_dict = pd.DataFrame(list(base_dict.items()), columns=["Ключ", "Значение"])
-            st.dataframe(df_dict, height=200)
-            st.markdown("#### Добавить пару")
-            new_key = st.text_input("🔑 Новый ключ")
-            new_value = st.text_input("📝 Новое значение")
-            if st.button("➕ Добавить пару"):
-                if new_key and new_value:
-                    base_dict[new_key] = new_value
+                        if loaded:
+                            # Обновление словаря
+                            base_dict.update(loaded)
+                            # Сохранение дополнений
+                            with open(ADDITIONS_FILE, "w", encoding="utf-8") as f:
+                                json.dump({str(k): str(v) for k, v in base_dict.items()}, f, ensure_ascii=False, indent=2)
+                            # Обновление структуры
+                            struct = build_final_struct(base_dict)
+                            st.success(f"Словарь обновлён: +{len(loaded)} пар")
+                        else:
+                            st.info("Ничего не загружено (проверьте формат)")
+                    except Exception as e:
+                        st.error(f"Ошибка: {e}")
+
+        with right:
+            st.markdown("#### Текущий словарь (часть)")
+            if base_dict:
+                df_dict = pd.DataFrame(list(base_dict.items()), columns=["Ключ", "Значение"]).head(200)
+                st.dataframe(df_dict)
+
+            st.markdown("#### Добавить вручную")
+            new_k = st.text_input("🔑 Новый ключ", key="nk")
+            new_v = st.text_input("📝 Новое значение", key="nv")
+            if st.button("➕ Добавить пару вручную"):
+                if new_k and new_v:
+                    base_dict[new_k] = new_v
+                    # Обновление файла и структуры
                     with open(ADDITIONS_FILE, "w", encoding="utf-8") as f:
                         json.dump({str(k): str(v) for k, v in base_dict.items()}, f, ensure_ascii=False, indent=2)
-                    update_search_struct(base_dict)
-                    st.success(f"Пара '{new_key}':'{new_value}' добавлена")
+                    struct = build_final_struct(base_dict)
+                    st.success(f"Добавлено: '{new_k}':'{new_v}'")
                 else:
                     st.warning("Заполните оба поля")
-    
+
     st.markdown("---")
-    # Раздел: Обработка файла
-    with st.expander("📝 Настройки обработки файла", expanded=True):
-        uploaded_file = st.file_uploader("📂 Выберите файл для обработки", type=["csv", "xls", "xlsx"])
-        col_name = st.text_input("🔤 Имя столбца для обработки")
-        if uploaded_file and not col_name:
+
+    # Обработка файла
+    with st.expander("📝 Обработка файла", expanded=True):
+        uploaded = st.file_uploader("📂 Выберите CSV/XLSX файл для обработки", type=["csv", "xls", "xlsx"])
+        col_name = st.text_input("🔤 Имя столбца для обработки (или оставьте пустым для выбора)")
+
+        # Предварительный просмотр колонок, если файл загружен без указания столбца
+        if uploaded and not col_name:
             try:
-                if uploaded_file.name.lower().endswith('.xlsx'):
-                    df_preview = pd.read_excel(uploaded_file, nrows=0, engine='openpyxl')
+                if uploaded.name.lower().endswith(".csv"):
+                    df0 = pd.read_csv(uploaded, nrows=0)
                 else:
-                    df_preview = pd.read_csv(uploaded_file, nrows=0)
-                if hasattr(df_preview, 'columns'):
-                    col_name = st.selectbox("📑 Выберите столбец для обработки", df_preview.columns.tolist())
-            except:
+                    df0 = pd.read_excel(uploaded, nrows=0)
+                cols = df0.columns.tolist()
+                if cols:
+                    col_name = st.selectbox("📑 Выберите столбец", cols)
+            except Exception:
                 pass
-        if uploaded_file and col_name:
+
+        if uploaded and col_name:
             try:
-                with st.spinner("Обрабатываем файл..."):
-                    file_bytes = uploaded_file.read()
-                    struct = search_struct if search_struct else build_final_struct_fast(base_dict, {})
-                    df_result = process_file_for_processing(file_bytes, uploaded_file.name, col_name, struct)
+                with st.spinner("Обрабатываем..."):
+                    bytes_data = uploaded.read()
+                    struct = build_final_struct(base_dict)
+                    df_res = process_file_for_processing(bytes_data, uploaded.name, col_name, struct)
                 st.success("✅ Обработка завершена")
-                st.markdown("### Результат")
-                st.dataframe(df_result.head(20))
-                # Кнопки скачивания
-                buf_xlsx = io.BytesIO()
-                buf_csv = io.BytesIO()
-                if uploaded_file.name.lower().endswith('.xlsx'):
-                    df_result.to_excel(buf_xlsx, index=False, engine='openpyxl')
-                    buf_xlsx.seek(0)
-                    st.download_button("⬇️ Скачать XLSX", buf_xlsx, file_name="result.xlsx",
-                                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+                st.markdown("### Превью (с подсветкой совпадений)")
+                # Отображение превью с подсветкой
+                preview_col = f"{col_name}_preview_html"
+                show_df = df_res.head(50).copy()
+                html_table = show_df.to_html(escape=False, index=False)
+                st.markdown(html_table, unsafe_allow_html=True)
+
+                st.markdown("### Скачать результат")
+                buf = io.BytesIO()
+                if uploaded.name.lower().endswith(".csv"):
+                    df_res.to_csv(buf, index=False, encoding=CSV_ENCODING)
+                    buf.seek(0)
+                    st.download_button("⬇️ Скачать CSV", buf, file_name="result.csv", mime="text/csv")
                 else:
-                    df_result.to_csv(buf_csv, index=False, encoding=CSV_ENCODING)
-                    buf_csv.seek(0)
-                    st.download_button("⬇️ Скачать CSV", buf_csv, file_name="result.csv", mime="text/csv")
+                    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+                        df_res.to_excel(writer, index=False)
+                    buf.seek(0)
+                    st.download_button("⬇️ Скачать XLSX", buf, file_name="result.xlsx",
+                                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             except Exception as e:
-                st.error(f"Ошибка: {e}")
+                st.error(f"Ошибка обработки: {e}")
+
+    st.markdown("---")
+    st.caption("Подсветка не влияет на экспортируемые данные — она предназначена только для визуальной проверки.")
 
 if __name__ == "__main__":
     run()
