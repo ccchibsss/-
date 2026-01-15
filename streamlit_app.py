@@ -2,7 +2,7 @@
 import io
 import os
 import json
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple
 import pandas as pd
 import streamlit as st
 import html
@@ -799,7 +799,7 @@ car_brands_models: Dict[str, str] = {
 "Trailer": "Прицеп",
 }
 
-# --- Загрузка существующего файла при запуске ---
+# --- Загрузка файла словаря при запуске ---
 ADDITIONS_FILE = "additional_brands.json"
 
 if os.path.exists(ADDITIONS_FILE):
@@ -873,6 +873,8 @@ def process_text(
     if not text:
         return text, ""
     search_terms = list(dict_brands_models.keys())
+
+    # Создаем список для поиска: исходный текст и транслит
     texts_for_search = [text]
     translit_text = ''
     if translit_enabled:
@@ -887,19 +889,20 @@ def process_text(
             start_idx = t_lower.find(word_lower)
             if start_idx != -1:
                 end_idx = start_idx + len(word_lower)
+                # Определяем позицию в оригинальном тексте
                 if t is translit_text:
                     start_in_orig = 0
                     end_in_orig = len(text)
                 else:
                     start_in_orig = start_idx
                     end_in_orig = end_idx
-                matches_info.append((start_in_orig, end_in_orig, word, ""))
+                matches_info.append((start_in_orig, end_in_orig, word))
     # Подсветка
-    html_preview = highlight_html_full(text, [ (start, end, _) for start, end, _, _ in matches_info ])
+    html_preview = highlight_html_full(text, [ (start, end, _) for start, end, _ in matches_info ])
 
     if matches_info:
         parts = []
-        for start, end, w, _ in matches_info:
+        for start, end, w in matches_info:
             trans_word = dict_brands_models.get(w, "")
             original_segment = text[start:end]
             # Формируем: "Русское название/оригинальный текст"
