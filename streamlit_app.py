@@ -62,7 +62,6 @@ def transliterate(text: str, direction: str='lat2cyr') -> str:
 
 # Ваш словарь марок и моделей
 car_brands_models: Dict[str, str] = {
-    # пример
     "Kia": "Киа",
     "Sportage": "Спортейдж",
     "Retona": "Ретона",
@@ -76,13 +75,13 @@ if os.path.exists(ADDITIONS_FILE):
         with open(ADDITIONS_FILE, "r", encoding="utf-8") as f:
             saved_dict = json.load(f)
             if isinstance(saved_dict, dict):
-                car_brands_models.update({str(k): str(v) for k, v in saved_dict.items()})
+                car_brands_models.update({str(k): str(v)) for k, v in saved_dict.items()})
     except:
         pass
 
 def save_dictionary_to_file(dictionary: Dict[str, str], filename: str=ADDITIONS_FILE):
     try:
-        with open(filename, "w", encoding="utf-8") as f:
+        with open(filename, "w", encoding='utf-8') as f:
             json.dump(dictionary, f, ensure_ascii=False, indent=2)
     except:
         pass
@@ -111,7 +110,7 @@ def update_dict_from_uploaded_file(uploaded_file):
     except Exception as e:
         st.error(f"Ошибка при загрузке файла: {e}")
 
-# Основная обработка строки
+# Основная обработка строки с добавлением оригинала и переводов внутри скобок
 def process_text(text: str, dict_brands_models: dict, translit_enabled: bool) -> str:
     if not text:
         return text
@@ -120,7 +119,6 @@ def process_text(text: str, dict_brands_models: dict, translit_enabled: bool) ->
     pattern_sep = '|'.join([re.escape(s) for s in separators])
     parts = re.split(f'({pattern_sep})', text)
 
-    # Создаем быстрый доступ
     dict_lower = {k.lower(): v for k, v in dict_brands_models.items()}
     pattern_words = '|'.join([re.escape(k) for k in dict_brands_models.keys()])
     regex = re.compile(rf'({pattern_words})', re.IGNORECASE)
@@ -152,8 +150,10 @@ def process_text(text: str, dict_brands_models: dict, translit_enabled: bool) ->
             processed_parts.append(segment)
 
     full_text = ''.join(processed_parts)
+    # В конце добавляем оригинальный текст и все переводы внутри скобок
     if found_translations:
-        return f"{full_text} - ({' / '.join(sorted(found_translations))})"
+        translations_str = ' / '.join(sorted(found_translations))
+        return f"{full_text} - ({full_text} [{translations_str}])"
     else:
         return full_text
 
