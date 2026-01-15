@@ -2,19 +2,19 @@
 import io
 import os
 import json
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 import pandas as pd
 import streamlit as st
 import html
 
-# Импорт морфологического анализатора (необязательно)
+# Импорт морфологического анализатора (не обязательно)
 try:
     import pymorphy2
     morph = pymorphy2.MorphAnalyzer()
 except Exception:
     morph = None
 
-# --- Словарь транслитерации из латиницы в кириллицу ---
+# --- Словарь транслитерации ---
 lat2cyr_dict = {
     'A':'А','a':'а','B':'Б','b':'б','V':'В','v':'в','G':'Г','g':'г',
     'D':'Д','d':'д','E':'Е','e':'е','Yo':'Ё','yo':'ё','ZH':'Ж','zh':'ж',
@@ -61,10 +61,7 @@ def transliterate(text: str, direction: str = 'lat2cyr') -> str:
     else:
         return text
 
-CSV_ENCODING = "utf-8-sig"
-ADDITIONS_FILE = "additional_brands.json"
-
-# --- Изначальный словарь марок и моделей ---
+# --- Объявление словаря марок и моделей ---
 car_brands_models: Dict[str, str] = {
     "Acura": "Акура",
 "Integra": "Интегра",
@@ -802,12 +799,15 @@ car_brands_models: Dict[str, str] = {
 "Trailer": "Прицеп",
 }
 
-# Загрузка существующего файла при запуске
+# --- Загрузка существующего файла при запуске ---
+ADDITIONS_FILE = "additional_brands.json"
+
 if os.path.exists(ADDITIONS_FILE):
     try:
         with open(ADDITIONS_FILE, "r", encoding="utf-8") as f:
             saved_dict = json.load(f)
             if isinstance(saved_dict, dict):
+                # Обновляем основной словарь
                 car_brands_models.update({str(k): str(v) for k, v in saved_dict.items()})
     except Exception:
         pass
@@ -829,13 +829,13 @@ def update_dict_from_uploaded_file(uploaded_file):
             if isinstance(obj, dict):
                 loaded_dict = {str(k): str(v) for k, v in obj.items()}
         elif filename_lower.endswith(".csv"):
-            df_dict = pd.read_csv(io.StringIO(dict_bytes.decode("utf-8")))
-            if len(df_dict.columns) >= 2:
-                loaded_dict = {str(k): str(v) for k, v in zip(df_dict.iloc[:,0], df_dict.iloc[:,1])}
+            df = pd.read_csv(io.StringIO(dict_bytes.decode("utf-8")))
+            if len(df.columns) >= 2:
+                loaded_dict = {str(k): str(v) for k, v in zip(df.iloc[:,0], df.iloc[:,1])}
         elif filename_lower.endswith(".xlsx"):
-            df_dict = pd.read_excel(io.BytesIO(dict_bytes), engine='openpyxl')
-            if len(df_dict.columns) >= 2:
-                loaded_dict = {str(k): str(v) for k, v in zip(df_dict.iloc[:,0], df_dict.iloc[:,1])}
+            df = pd.read_excel(io.BytesIO(dict_bytes), engine='openpyxl')
+            if len(df.columns) >= 2:
+                loaded_dict = {str(k): str(v) for k, v in zip(df.iloc[:,0], df.iloc[:,1])}
         else:
             st.error("Некорректный тип файла.")
             return
@@ -881,8 +881,6 @@ def process_text(
         texts_for_search.append(translit_text)
 
     matches_info = []
-    # В этом примере для каждого найденного слова задаем диапазон "1991 ~ 2000".
-    # В реальных данных диапазон нужно получать из источника.
     for t in texts_for_search:
         t_lower = t.lower()
         for word in search_terms:
@@ -890,7 +888,6 @@ def process_text(
             start_idx = t_lower.find(word_lower)
             if start_idx != -1:
                 end_idx = start_idx + len(word_lower)
-                # В реальности получайте диапазон из данных или парсите.
                 range_str = "1991 ~ 2000"  # пример диапазона
                 if t is translit_text:
                     matches_info.append((0, len(text), word, range_str))
@@ -898,8 +895,8 @@ def process_text(
                     start_in_orig = start_idx
                     end_in_orig = end_idx
                     matches_info.append((start_in_orig, end_in_orig, word, range_str))
-    # Подсветка и подготовка вывода
-    html_preview = highlight_html_full(text, [ (start, end) for start, end, _, _ in matches_info ])
+    # Подсветка
+    html_preview = highlight_html_full(text, [ (start, end, _) for start, end, _, _ in matches_info ])
 
     if matches_info:
         parts = []
@@ -918,20 +915,19 @@ def process_text(
 
 def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, dict_brands_models: Dict[str, str], translit_enabled: bool) -> pd.DataFrame:
     ext = os.path.splitext(filename)[1].lower()
-    if ext == ".csv":
-        text = None
-        for enc in ("utf-8", "cp1251", "latin1"):
-            try:
-                text = file_bytes.decode(enc)
-                df = pd.read_csv(io.StringIO(text))
-                break
-            except:
-                continue
-        if text is None:
-            text = file_bytes.decode("utf-8", errors="replace")
-            df = pd.read_csv(io.StringIO(text))
+    if ext in ['.xlsx', '.xls']:
+        try:
+            df = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
+        except:
+            df = pd.read_excel(io.BytesIO(file_bytes))
+    elif ext == '.csv':
+        try:
+            df = pd.read_csv(io.StringIO(file_bytes.decode('utf-8')))
+        except:
+            df = pd.read_csv(io.StringIO(file_bytes.decode('cp1251', errors='replace')))
     else:
-        df = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
+        df = pd.DataFrame()
+
     if col_name not in df.columns:
         raise ValueError(f"Столбец '{col_name}' не найден в файле.")
     series = df[col_name].fillna("").astype(str)
@@ -946,7 +942,7 @@ def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str,
 def run():
     st.set_page_config(page_title="🚗 Обработка брендов/моделей", layout="wide")
 
-    # --- Раздел "Настройки словаря" ---
+    # --- Настройки словаря ---
     st.markdown(
         """
         <div style="background:linear-gradient(90deg,#2196F3,#21CBF3);padding:16px;border-radius:8px">
@@ -957,18 +953,11 @@ def run():
         unsafe_allow_html=True,
     )
 
-    # Инструкция по формату файла
-    st.info("Поддерживаются файлы: JSON, CSV, XLSX. В файле должны быть минимум 2 столбца: латиница и кириллица. Например:\n\n" +
-            "- JSON: {\"Acura\": \"Акура\", \"BMW\": \"БМВ\"}\n" +
-            "- CSV: латиница,кириллица\n" +
-            "- XLSX: первый столбец - латиница, второй - кириллица")
-
-    # --- Загрузка файла словаря ---
+    st.info("Поддерживаются файлы: JSON, CSV, XLSX. В файле минимум 2 столбца: латиница и кириллица.")
     uploaded_dict_file = st.file_uploader("Загрузить файл словаря (JSON, CSV или XLSX)", type=["json", "csv", "xlsx"])
     if uploaded_dict_file:
         update_dict_from_uploaded_file(uploaded_dict_file)
 
-    # --- Ручное редактирование словаря ---
     st.subheader("Редактировать словарь вручную")
     dict_text = "\n".join([f"{k},{v}" for k, v in car_brands_models.items()])
     edited_text = st.text_area("Редактировать словарь (каждая строка: латиница,кириллица)", value=dict_text, height=300)
@@ -986,10 +975,8 @@ def run():
         save_dictionary_to_file(car_brands_models)
         st.success("Словарь сохранён.")
 
-    # --- Опция поиска по транслиту ---
     translit_enabled = st.checkbox("Искать и по транслиту", value=True)
 
-    # --- Транслитерация ---
     st.markdown(
         """
         <div style="background:linear-gradient(90deg,#4CAF50,#81C784);padding:16px;border-radius:8px;margin-top:20px">
@@ -1012,12 +999,11 @@ def run():
             st.success("Результат транслитерации (кириллица → латиница):")
             st.code(result)
 
-    # --- Обработка файла ---    
     st.markdown(
         """
         <div style="background:linear-gradient(90deg,#2196F3,#21CBF3);padding:16px;border-radius:8px;margin-top:20px">
         <h2 style="color:white;margin:0">🚗 Обработка данных</h2>
-        <p style="color:rgba(255,255,255,0.9);margin:4px 0 0">Загрузка файла (Excel или CSV), поиск и подсветка</p>
+        <p style="color:rgba(255,255,255,0.9);margin:4px 0 0">Загрузите файл (Excel или CSV), поиск и подсветка</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1044,7 +1030,6 @@ def run():
             else:
                 df_preview = pd.DataFrame()
 
-            # Выбор столбца для обработки
             if not df_preview.empty:
                 col_options = list(df_preview.columns)
                 col_name = st.selectbox("Выберите название столбца для обработки", options=col_options)
@@ -1052,31 +1037,15 @@ def run():
                 col_name = st.text_input("Введите название столбца для обработки", value="Название")
             
             if col_name:
-                # Обработка файла и получения DataFrame с обработанными данными
                 df_processed = process_file_for_processing(file_bytes, uploaded_file.name, col_name, car_brands_models, translit_enabled)
                 st.success("Файл успешно обработан")
-                # Выводим обработанный DataFrame
                 st.dataframe(df_processed)
-                # --- Скачивание ---
-                col1, col2 = st.columns(2)
-                with col1:
-                    buf_xlsx = io.BytesIO()
-                    df_processed.to_excel(buf_xlsx, index=False, engine='openpyxl')
-                    buf_xlsx.seek(0)
-                    st.download_button(
-                        label="Скачать как Excel",
-                        data=buf_xlsx,
-                        file_name="processed_" + uploaded_file.name,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                with col2:
-                    buf_csv = df_processed.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="Скачать как CSV",
-                        data=buf_csv,
-                        file_name="processed_" + os.path.splitext(uploaded_file.name)[0] + ".csv",
-                        mime="text/csv"
-                    )
+                buf_xlsx = io.BytesIO()
+                df_processed.to_excel(buf_xlsx, index=False, engine='openpyxl')
+                buf_xlsx.seek(0)
+                st.download_button("Скачать как Excel", buf_xlsx, "processed_" + uploaded_file.name, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                buf_csv = df_processed.to_csv(index=False).encode('utf-8')
+                st.download_button("Скачать как CSV", buf_csv, "processed_" + os.path.splitext(uploaded_file.name)[0]+".csv", mime="text/csv")
             else:
                 st.warning("Не удалось определить название столбца.")
         except Exception as e:
