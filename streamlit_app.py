@@ -807,7 +807,6 @@ if os.path.exists(ADDITIONS_FILE):
         with open(ADDITIONS_FILE, "r", encoding="utf-8") as f:
             saved_dict = json.load(f)
             if isinstance(saved_dict, dict):
-                # Обновляем основной словарь
                 car_brands_models.update({str(k): str(v) for k, v in saved_dict.items()})
     except Exception:
         pass
@@ -847,7 +846,7 @@ def update_dict_from_uploaded_file(uploaded_file):
         st.error(f"Ошибка при загрузке файла словаря: {e}")
 
 def highlight_html_full(text: str, matches: list) -> str:
-    """Подсвечивает слова в тексте по диапазонам."""
+    """Подсветка совпадений в тексте."""
     if not matches:
         return html.escape(text)
     matches_sorted = sorted(matches, key=lambda x: x[0])
@@ -870,7 +869,7 @@ def process_text(
     dict_brands_models: Dict[str, str],
     translit_enabled: bool
 ) -> Tuple[str, str]:
-    """Обработка текста: поиск по словарю и транслиту, подсветка, формирование строки с диапазонами."""
+    """Обработка текста: поиск по словарю и транслиту, подсветка, формирование строки."""
     if not text:
         return text, ""
     search_terms = list(dict_brands_models.keys())
@@ -888,26 +887,24 @@ def process_text(
             start_idx = t_lower.find(word_lower)
             if start_idx != -1:
                 end_idx = start_idx + len(word_lower)
-                range_str = "1991 ~ 2000"  # пример диапазона
                 if t is translit_text:
-                    matches_info.append((0, len(text), word, range_str))
+                    start_in_orig = 0
+                    end_in_orig = len(text)
                 else:
                     start_in_orig = start_idx
                     end_in_orig = end_idx
-                    matches_info.append((start_in_orig, end_in_orig, word, range_str))
+                matches_info.append((start_in_orig, end_in_orig, word, ""))
     # Подсветка
     html_preview = highlight_html_full(text, [ (start, end, _) for start, end, _, _ in matches_info ])
 
     if matches_info:
         parts = []
-        range_parts = []
-        for start, end, w, range_str in matches_info:
+        for start, end, w, _ in matches_info:
             trans_word = dict_brands_models.get(w, "")
             original_segment = text[start:end]
-            parts.append(f"{trans_word} {original_segment}")
-            range_parts.append(range_str)
+            # Формируем: "Русское название/оригинальный текст"
+            parts.append(f"{trans_word}/{original_segment}")
         translations_str = " / ".join(parts)
-        ranges_joined = " / ".join(range_parts)
         result_str = f"{text} - ({translations_str})"
     else:
         result_str = text
