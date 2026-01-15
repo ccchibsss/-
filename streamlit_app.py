@@ -2,6 +2,7 @@
 import io
 import os
 import json
+import re
 from typing import Dict, Tuple
 import pandas as pd
 import streamlit as st
@@ -872,45 +873,59 @@ def process_text(
     """Обработка текста: поиск по словарю и транслиту, подсветка, формирование строки."""
     if not text:
         return text, ""
-    search_terms = list(dict_brands_models.keys())
 
-    # Создаем список для поиска: исходный текст и транслит
-    texts_for_search = [text]
-    translit_text = ''
+    matches = []
+
+    # Поиск по исходному тексту
+    for w in dict_brands_models.keys():
+        pattern = re.escape(w)
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            start, end = match.start(), match.end()
+            matches.append((start, end, w))
+
+    # Поиск по транслиту
     if translit_enabled:
         translit_text = transliterate(text, 'lat2cyr')
-        texts_for_search.append(translit_text)
+        for w in dict_brands_models.keys():
+            pattern = re.escape(w)
+            for match in re.finditer(pattern, translit_text, re.IGNORECASE):
+                start, end = match.start(), match.end()
+                matches.append((start, end, w))
 
-    matches_info = []
-    for t in texts_for_search:
-        t_lower = t.lower()
-        for word in search_terms:
-            word_lower = word.lower()
-            start_idx = t_lower.find(word_lower)
-            if start_idx != -1:
-                end_idx = start_idx + len(word_lower)
-                # Определяем позицию в оригинальном тексте
-                if t is translit_text:
-                    start_in_orig = 0
-                    end_in_orig = len(text)
-                else:
-                    start_in_orig = start_idx
-                    end_in_orig = end_idx
-                matches_info.append((start_in_orig, end_in_orig, word))
+    # Удаляем дубли по позициям
+    matches = list(set(matches))
+    matches.sort(key=lambda x: x[0])
+
     # Подсветка
-    html_preview = highlight_html_full(text, [ (start, end, _) for start, end, _ in matches_info ])
+    def highlight_match(match):
+        start, end, w = match
+        return f'<mark style="{HIGHLIGHT_STYLE}">{html.escape(text[start:end])}</mark>'
 
-    if matches_info:
+    result_html_parts = []
+    last_idx = 0
+    for m in matches:
+        start, end, w = m
+        if start > last_idx:
+            result_html_parts.append(html.escape(text[last_idx:start]))
+        result_html_parts.append(highlight_match(m))
+        last_idx = end
+    if last_idx < len(text):
+        result_html_parts.append(html.escape(text[last_idx:]))
+
+    html_preview = "".join(result_html_parts)
+
+    # Формируем итоговую строку
+    if matches:
         parts = []
-        for start, end, w in matches_info:
+        for start, end, w in matches:
             trans_word = dict_brands_models.get(w, "")
             original_segment = text[start:end]
-            # Формируем: "Русское название/оригинальный текст"
             parts.append(f"{trans_word}/{original_segment}")
         translations_str = " / ".join(parts)
         result_str = f"{text} - ({translations_str})"
     else:
         result_str = text
+
     return result_str, html_preview
 
 def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, dict_brands_models: Dict[str, str], translit_enabled: bool) -> pd.DataFrame:
