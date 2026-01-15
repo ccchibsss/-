@@ -878,11 +878,12 @@ def process_text(
                 else:
                     start_in_orig = start_idx
                     end_in_orig = end_idx
-                matches_info.append((start_in_orig, end_in_orig, w))
+                # добавляем слово и его перевод
+                matches_info.append((start_in_orig, end_in_orig, word))
     # Собираем все переводы для найденных слов
     translations = []
-    for _, _, w in matches_info:
-        trans_word = dict_brands_models.get(w, "")
+    for _, _, matched_word in matches_info:
+        trans_word = dict_brands_models.get(matched_word, "")
         translations.append(trans_word)
 
     # Итоговая строка: оригинал + (переводы через /)
