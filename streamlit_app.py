@@ -25,7 +25,6 @@ lat2cyr_dict = {
     'Ch':'Ч','ch':'ч','Sh':'Ш','sh':'ш','Shch':'Щ','shch':'щ',
     'Y\'':'Ы','y\'':'ы','E\'':'Э','e\'':'э','Yu':'Ю','yu':'ю','Ya':'Я','ya':'я'
 }
-
 latin_to_cyr = dict(lat2cyr_dict)
 
 def transliterate_latin_to_cyrillic(text: str) -> str:
@@ -799,7 +798,6 @@ car_brands_models: Dict[str, str] = {
 "Trailer": "Прицеп",
 }
 
-# --- Загрузка файла словаря при запуске ---
 ADDITIONS_FILE = "additional_brands.json"
 
 if os.path.exists(ADDITIONS_FILE):
@@ -847,14 +845,13 @@ def update_dict_from_uploaded_file(uploaded_file):
 
 def process_text(
     text: str,
-    struct: dict,
-    dict_brands_models: Dict[str, str],
+    dict_brands_models: dict,
     translit_enabled: bool
-) -> Tuple[str, str]:
-    """Обработка текста: сохраняет структуру разделителей и добавляет переводы внутри сегментов."""
+) -> str:
+    """Обработка текста с сохранением структуры и заменой слов."""
     if not text:
-        return text, ""
-    # Разделители
+        return text
+
     separators = ['/', ';', '-', '—', '–']
     pattern = '|'.join([re.escape(sep) for sep in separators])
     parts = re.split(f'({pattern})', text)
@@ -864,10 +861,8 @@ def process_text(
     for part in parts:
         part_strip = part.strip()
         if part_strip in separators:
-            # это разделитель, оставить как есть
             processed_parts.append(part)
         else:
-            # Обработка сегмента
             segment = part
             search_texts = [segment]
             translit_text = ''
@@ -875,33 +870,55 @@ def process_text(
                 translit_text = transliterate(segment, 'lat2cyr')
                 search_texts.append(translit_text)
 
+            # Используем регулярное выражение для поиска слов
+            pattern_words = '|'.join([re.escape(k) for k in dict_brands_models.keys()])
+            regex = re.compile(rf'({pattern_words})', re.IGNORECASE)
+
             for t in search_texts:
                 t_lower = t.lower()
-                for word, translation in dict_brands_models.items():
-                    word_lower = word.lower()
-                    start_idx = t_lower.find(word_lower)
-                    if start_idx != -1:
-                        end_idx = start_idx + len(word_lower)
-                        # Позиции в оригинальном сегменте
-                        if t is translit_text:
-                            start_in_orig = 0
-                            end_in_orig = len(segment)
-                        else:
-                            start_in_orig = start_idx
-                            end_in_orig = end_idx
-                        original_word = segment[start_in_orig:end_in_orig]
-                        # вставляем перевод
-                        new_word = f"{original_word} {translation}"
-                        segment = segment[:start_in_orig] + new_word + segment[end_in_orig:]
+                def replacer(match):
+                    word_found = match.group(0)
+                    key_lower = word_found.lower()
+                    for key in dict_brands_models:
+                        if key.lower() == key_lower:
+                            return f"{word_found} {dict_brands_models[key]}"
+                    return word_found
+                segment = regex.sub(replacer, segment)
+
             processed_parts.append(segment)
 
-    result_text = ''.join(processed_parts)
-    return result_text, ""
+    return ''.join(processed_parts)
 
+def process_file_for_processing(file_bytes, filename, col_name, dict_brands_models, translit_enabled):
+    ext = os.path.splitext(filename)[1].lower()
+    if ext in ['.xlsx', '.xls']:
+        df = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
+    elif ext == '.csv':
+        try:
+            df = pd.read_csv(io.BytesIO(file_bytes))
+        except:
+            df = pd.read_csv(io.StringIO(file_bytes.decode('utf-8')))
+    else:
+        df = pd.DataFrame()
+
+    if col_name not in df.columns:
+        raise ValueError(f"Столбец '{col_name}' не найден в файле.")
+    series = df[col_name].fillna("").astype(str)
+
+    plain_list = []
+    for txt in series:
+        plain = process_text(txt, dict_brands_models, translit_enabled)
+        plain_list.append(plain)
+
+    df_result = df.copy()
+    df_result[col_name] = plain_list
+    return df_result
+
+# Основная функция Streamlit
 def run():
     st.set_page_config(page_title="🚗 Обработка брендов/моделей", layout="wide")
-
-    # --- Настройки словаря ---
+    
+    # Настройки
     st.markdown(
         """
         <div style="background:linear-gradient(90deg,#2196F3,#21CBF3);padding:16px;border-radius:8px">
@@ -958,6 +975,7 @@ def run():
             st.success("Результат транслитерации (кириллица → латиница):")
             st.code(result)
 
+    # Обработка файла
     st.markdown(
         """
         <div style="background:linear-gradient(90deg,#2196F3,#21CBF3);padding:16px;border-radius:8px;margin-top:20px">
@@ -1009,32 +1027,6 @@ def run():
                 st.warning("Не удалось определить название столбца.")
         except Exception as e:
             st.error(f"Ошибка при обработке файла: {e}")
-
-def process_file_for_processing(file_bytes, filename, col_name, dict_brands_models, translit_enabled):
-    ext = os.path.splitext(filename)[1].lower()
-    if ext in ['.xlsx', '.xls']:
-        try:
-            df = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
-        except:
-            df = pd.read_excel(io.BytesIO(file_bytes))
-    elif ext == '.csv':
-        try:
-            df = pd.read_csv(io.StringIO(file_bytes.decode('utf-8')))
-        except:
-            df = pd.read_csv(io.StringIO(file_bytes.decode('cp1251', errors='replace')))
-    else:
-        df = pd.DataFrame()
-
-    if col_name not in df.columns:
-        raise ValueError(f"Столбец '{col_name}' не найден в файле.")
-    series = df[col_name].fillna("").astype(str)
-    plain_list = []
-    for txt in series:
-        plain, _ = process_text(txt, {}, dict_brands_models, translit_enabled)
-        plain_list.append(plain)
-    df_result = df.copy()
-    df_result[col_name] = plain_list
-    return df_result
 
 if __name__ == "__main__":
     run()
