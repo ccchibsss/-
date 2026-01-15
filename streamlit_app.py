@@ -66,7 +66,6 @@ ADDITIONS_FILE = "additional_brands.json"
 
 # --- Изначальный словарь марок и моделей ---
 car_brands_models: Dict[str, str] = {
-    # Вставьте сюда весь ваш словарь как есть
     "Acura": "Акура",
 "Integra": "Интегра",
 "MDX": "МДХ",
@@ -814,7 +813,6 @@ if os.path.exists(ADDITIONS_FILE):
     except Exception:
         pass
 
-# Сохранение словаря
 def save_dictionary_to_file(dictionary: Dict[str, str], filename: str = ADDITIONS_FILE):
     try:
         with open(filename, "w", encoding="utf-8") as f:
@@ -822,7 +820,6 @@ def save_dictionary_to_file(dictionary: Dict[str, str], filename: str = ADDITION
     except Exception as e:
         st.exception(f"Ошибка при сохранении файла: {e}")
 
-# Обновление из файла
 def update_dict_from_uploaded_file(uploaded_file):
     try:
         dict_bytes = uploaded_file.read()
@@ -850,65 +847,67 @@ def update_dict_from_uploaded_file(uploaded_file):
     except Exception as e:
         st.error(f"Ошибка при загрузке файла словаря: {e}")
 
-# Основная обработка текста с подсветкой только слов внутри всего текста
-def process_text(
-    text: str,
-    struct: dict,
-    dict_brands_models: Dict[str, str],
-    translit_enabled: bool
-) -> Tuple[str, str]:
-    if not text:
-        return text, ""
-    search_terms = list(dict_brands_models.keys())
-    texts_for_search = [text]
-    if translit_enabled:
-        translit_text = transliterate(text, 'lat2cyr')
-        texts_for_search.append(translit_text)
-    matches_info = []
-    lower_texts = [t.lower() for t in texts_for_search]
-    for idx, t in enumerate(lower_texts):
-        for word in search_terms:
-            word_lower = word.lower()
-            start_idx = t.find(word_lower)
-            if start_idx != -1:
-                end_idx = start_idx + len(word_lower)
-                # Индексы в оригинальном тексте
-                start_in_orig = start_idx
-                end_in_orig = end_idx
-                # Запоминаем слово для подсветки
-                matches_info.append((start_in_orig, end_in_orig, word))
-    # Создаем подсветку только для найденных слов внутри текста
-    html_preview = highlight_html_full(text, matches_info)
-    if matches_info:
-        translations = " / ".join({dict_brands_models.get(w, "") for _, _, w in matches_info})
-        result_str = f"{text} - ({translations})"
-    else:
-        result_str = text
-    return result_str, html_preview
-
-# Подсветка всего текста с выделением найденных слов
 def highlight_html_full(text: str, matches: list) -> str:
+    """Подсвечивает слова в тексте по диапазонам."""
     if not matches:
         return html.escape(text)
-    # Сортируем по началу
     matches_sorted = sorted(matches, key=lambda x: x[0])
     out = []
     last_idx = 0
     for start, end, _ in matches_sorted:
-        # добавляем часть текста до слова
         if start > last_idx:
             out.append(html.escape(text[last_idx:start]))
-        # добавляем подсвеченное слово
         out.append(f'<mark style="{HIGHLIGHT_STYLE}">{html.escape(text[start:end])}</mark>')
         last_idx = end
-    # добавляем остаток текста
     if last_idx < len(text):
         out.append(html.escape(text[last_idx:]))
     return "".join(out)
 
 HIGHLIGHT_STYLE = "background: #ffeb3b; color: #000; padding: 0 2px; border-radius: 2px;"
 
-# Обработка файла
+def process_text(
+    text: str,
+    struct: dict,
+    dict_brands_models: Dict[str, str],
+    translit_enabled: bool
+) -> Tuple[str, str]:
+    """Обработка текста: поиск по словарю и транслиту, подсветка, формирование перевода."""
+    if not text:
+        return text, ""
+    search_terms = list(dict_brands_models.keys())
+    texts_for_search = [text]
+    translit_text = ''
+    if translit_enabled:
+        translit_text = transliterate(text, 'lat2cyr')
+        texts_for_search.append(translit_text)
+    matches_info = []
+    for t in texts_for_search:
+        t_lower = t.lower()
+        for word in search_terms:
+            word_lower = word.lower()
+            start_idx = t_lower.find(word_lower)
+            if start_idx != -1:
+                end_idx = start_idx + len(word_lower)
+                # Если поиск по транслиту, подсвечиваем весь текст
+                if t is translit_text:
+                    matches_info.append((0, len(text), "translit"))
+                else:
+                    # Индексы по оригинальному тексту
+                    start_in_orig = start_idx
+                    end_in_orig = end_idx
+                    matches_info.append((start_in_orig, end_in_orig, word))
+    html_preview = highlight_html_full(text, matches_info)
+    if matches_info:
+        translations_list = []
+        for start, end, w in matches_info:
+            trans_word = dict_brands_models.get(w, "")
+            original_text = text[start:end]
+            translations_list.append(f"{trans_word} {original_text}")
+        result_str = f"{text} - ({' / '.join(translations_list)})"
+    else:
+        result_str = text
+    return result_str, html_preview
+
 def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, dict_brands_models: Dict[str, str], translit_enabled: bool) -> pd.DataFrame:
     ext = os.path.splitext(filename)[1].lower()
     if ext == ".csv":
@@ -1045,10 +1044,10 @@ def run():
                 col_name = st.text_input("Введите название столбца для обработки", value="Название")
             
             if col_name:
-                # Обработка файла и получение DataFrame с обработанными данными
+                # Обработка файла и получения DataFrame с обработанными данными
                 df_processed = process_file_for_processing(file_bytes, uploaded_file.name, col_name, car_brands_models, translit_enabled)
                 st.success("Файл успешно обработан")
-                # Выводим обработанный DataFrame без _preview_html
+                # Выводим обработанный DataFrame
                 st.dataframe(df_processed)
                 # --- Скачивание ---
                 col1, col2 = st.columns(2)
