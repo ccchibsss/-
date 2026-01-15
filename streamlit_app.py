@@ -5,7 +5,7 @@ import json
 from typing import Dict, Tuple
 import pandas as pd
 import streamlit as st
-import html
+import re
 
 # Импорт морфологического анализатора (не обязательно)
 try:
@@ -851,75 +851,52 @@ def process_text(
     dict_brands_models: Dict[str, str],
     translit_enabled: bool
 ) -> Tuple[str, str]:
-    """Обработка текста: поиск по словарю и транслиту, выводит оригинал и все переводы в скобках."""
+    """Обработка текста: сохраняет структуру разделителей и добавляет переводы внутри сегментов."""
     if not text:
         return text, ""
-    search_terms = list(dict_brands_models.keys())
+    # Разделители
+    separators = ['/', ';', '-', '—', '–']
+    pattern = '|'.join([re.escape(sep) for sep in separators])
+    parts = re.split(f'({pattern})', text)
 
-    # Создаем список для поиска: исходный текст и транслит
-    texts_for_search = [text]
-    translit_text = ''
-    if translit_enabled:
-        translit_text = transliterate(text, 'lat2cyr')
-        texts_for_search.append(translit_text)
+    processed_parts = []
 
-    matches_info = []
-    for t in texts_for_search:
-        t_lower = t.lower()
-        for word in search_terms:
-            word_lower = word.lower()
-            start_idx = t_lower.find(word_lower)
-            if start_idx != -1:
-                end_idx = start_idx + len(word_lower)
-                # Определяем позицию в оригинальном тексте
-                if t is translit_text:
-                    start_in_orig = 0
-                    end_in_orig = len(text)
-                else:
-                    start_in_orig = start_idx
-                    end_in_orig = end_idx
-                # добавляем слово и его перевод
-                matches_info.append((start_in_orig, end_in_orig, word))
-    # Собираем все переводы для найденных слов
-    translations = []
-    for _, _, matched_word in matches_info:
-        trans_word = dict_brands_models.get(matched_word, "")
-        translations.append(trans_word)
+    for part in parts:
+        part_strip = part.strip()
+        if part_strip in separators:
+            # это разделитель, оставить как есть
+            processed_parts.append(part)
+        else:
+            # Обработка сегмента
+            segment = part
+            search_texts = [segment]
+            translit_text = ''
+            if translit_enabled:
+                translit_text = transliterate(segment, 'lat2cyr')
+                search_texts.append(translit_text)
 
-    # Итоговая строка: оригинал + (переводы через /)
-    if translations:
-        full_translation = " / ".join(translations)
-        result_str = f"{text} - ({full_translation})"
-    else:
-        result_str = text
+            for t in search_texts:
+                t_lower = t.lower()
+                for word, translation in dict_brands_models.items():
+                    word_lower = word.lower()
+                    start_idx = t_lower.find(word_lower)
+                    if start_idx != -1:
+                        end_idx = start_idx + len(word_lower)
+                        # Позиции в оригинальном сегменте
+                        if t is translit_text:
+                            start_in_orig = 0
+                            end_in_orig = len(segment)
+                        else:
+                            start_in_orig = start_idx
+                            end_in_orig = end_idx
+                        original_word = segment[start_in_orig:end_in_orig]
+                        # вставляем перевод
+                        new_word = f"{original_word} {translation}"
+                        segment = segment[:start_in_orig] + new_word + segment[end_in_orig:]
+            processed_parts.append(segment)
 
-    return result_str, ""
-
-def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, dict_brands_models: Dict[str, str], translit_enabled: bool) -> pd.DataFrame:
-    ext = os.path.splitext(filename)[1].lower()
-    if ext in ['.xlsx', '.xls']:
-        try:
-            df = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
-        except:
-            df = pd.read_excel(io.BytesIO(file_bytes))
-    elif ext == '.csv':
-        try:
-            df = pd.read_csv(io.StringIO(file_bytes.decode('utf-8')))
-        except:
-            df = pd.read_csv(io.StringIO(file_bytes.decode('cp1251', errors='replace')))
-    else:
-        df = pd.DataFrame()
-
-    if col_name not in df.columns:
-        raise ValueError(f"Столбец '{col_name}' не найден в файле.")
-    series = df[col_name].fillna("").astype(str)
-    plain_list = []
-    for txt in series:
-        plain, _ = process_text(txt, {}, dict_brands_models, translit_enabled)
-        plain_list.append(plain)
-    df_result = df.copy()
-    df_result[col_name] = plain_list
-    return df_result
+    result_text = ''.join(processed_parts)
+    return result_text, ""
 
 def run():
     st.set_page_config(page_title="🚗 Обработка брендов/моделей", layout="wide")
@@ -985,7 +962,7 @@ def run():
         """
         <div style="background:linear-gradient(90deg,#2196F3,#21CBF3);padding:16px;border-radius:8px;margin-top:20px">
         <h2 style="color:white;margin:0">🚗 Обработка данных</h2>
-        <p style="color:rgba(255,255,255,0.9);margin:4px 0 0">Загрузите файл (Excel или CSV), поиск и обработка</p>
+        <p style="color:rgba(255,255,255,0.9);margin:4px 0">Загрузите файл (Excel или CSV), поиск и обработка</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1032,6 +1009,32 @@ def run():
                 st.warning("Не удалось определить название столбца.")
         except Exception as e:
             st.error(f"Ошибка при обработке файла: {e}")
+
+def process_file_for_processing(file_bytes, filename, col_name, dict_brands_models, translit_enabled):
+    ext = os.path.splitext(filename)[1].lower()
+    if ext in ['.xlsx', '.xls']:
+        try:
+            df = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
+        except:
+            df = pd.read_excel(io.BytesIO(file_bytes))
+    elif ext == '.csv':
+        try:
+            df = pd.read_csv(io.StringIO(file_bytes.decode('utf-8')))
+        except:
+            df = pd.read_csv(io.StringIO(file_bytes.decode('cp1251', errors='replace')))
+    else:
+        df = pd.DataFrame()
+
+    if col_name not in df.columns:
+        raise ValueError(f"Столбец '{col_name}' не найден в файле.")
+    series = df[col_name].fillna("").astype(str)
+    plain_list = []
+    for txt in series:
+        plain, _ = process_text(txt, {}, dict_brands_models, translit_enabled)
+        plain_list.append(plain)
+    df_result = df.copy()
+    df_result[col_name] = plain_list
+    return df_result
 
 if __name__ == "__main__":
     run()
