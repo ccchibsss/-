@@ -856,6 +856,13 @@ def process_text(
     pattern = '|'.join([re.escape(sep) for sep in separators])
     parts = re.split(f'({pattern})', text)
 
+    # подготовим словарь для быстрого поиска ключей (в нижнем регистре)
+    dict_lower = {k.lower(): v for k, v in dict_brands_models.items()}
+
+    # создаем регэксп один раз
+    pattern_words = '|'.join([re.escape(k) for k in dict_brands_models.keys()])
+    regex = re.compile(rf'({pattern_words})', re.IGNORECASE)
+
     found_translations = set()
     processed_parts = []
 
@@ -866,22 +873,16 @@ def process_text(
         else:
             segment = part
             search_texts = [segment]
-            translit_text = ''
             if translit_enabled:
                 translit_text = transliterate(segment, 'lat2cyr')
                 search_texts.append(translit_text)
 
-            pattern_words = '|'.join([re.escape(k) for k in dict_brands_models.keys()])
-            regex = re.compile(rf'({pattern_words})', re.IGNORECASE)
-
-            # Ищем и добавляем переводы к найденным словам
+            # ищем и собираем переводы
             def replacer(match):
                 word_found = match.group(0)
                 key_lower = word_found.lower()
-                for key in dict_brands_models:
-                    if key.lower() == key_lower:
-                        found_translations.add(dict_brands_models[key])
-                        break
+                if key_lower in dict_lower:
+                    found_translations.add(dict_lower[key_lower])
                 return word_found
 
             for t in search_texts:
@@ -889,7 +890,7 @@ def process_text(
 
             processed_parts.append(segment)
 
-    # Собираем весь текст и добавляем переводы в конце, если есть
+    # собираем окончательный результат
     full_text = ''.join(processed_parts)
     if found_translations:
         translations_str = ' / '.join(sorted(found_translations))
