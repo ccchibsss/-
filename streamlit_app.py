@@ -800,9 +800,9 @@ car_brands_models: Dict[str, str] = {
 "Trailer": "Прицеп",
 }
 
-# --- Загрузка файла словаря при запуске ---
 ADDITIONS_FILE = "additional_brands.json"
 
+# Загрузка файла словаря при запуске
 if os.path.exists(ADDITIONS_FILE):
     try:
         with open(ADDITIONS_FILE, "r", encoding="utf-8") as f:
@@ -846,22 +846,6 @@ def update_dict_from_uploaded_file(uploaded_file):
     except Exception as e:
         st.error(f"Ошибка при загрузке файла словаря: {e}")
 
-def highlight_html_full(text: str, matches: list) -> str:
-    """Подсветка совпадений в тексте."""
-    if not matches:
-        return html.escape(text)
-    matches_sorted = sorted(matches, key=lambda x: x[0])
-    out = []
-    last_idx = 0
-    for start, end, _ in matches_sorted:
-        if start > last_idx:
-            out.append(html.escape(text[last_idx:start]))
-        out.append(f'<mark style="{HIGHLIGHT_STYLE}">{html.escape(text[start:end])}</mark>')
-        last_idx = end
-    if last_idx < len(text):
-        out.append(html.escape(text[last_idx:]))
-    return "".join(out)
-
 HIGHLIGHT_STYLE = "background: #ffeb3b; color: #000; padding: 0 2px; border-radius: 2px;"
 
 def process_text(
@@ -870,35 +854,40 @@ def process_text(
     dict_brands_models: Dict[str, str],
     translit_enabled: bool
 ) -> Tuple[str, str]:
-    """Обработка текста: поиск по словарю и транслиту, подсветка, формирование строки."""
     if not text:
         return text, ""
 
     matches = []
 
-    # Поиск по исходному тексту
-    for w in dict_brands_models.keys():
-        pattern = re.escape(w)
-        for match in re.finditer(pattern, text, re.IGNORECASE):
-            start, end = match.start(), match.end()
-            matches.append((start, end, w))
-
-    # Поиск по транслиту
+    # Формируем шаблон поиска всех ключей
+    pattern_list = [re.escape(w) for w in dict_brands_models.keys()]
     if translit_enabled:
         translit_text = transliterate(text, 'lat2cyr')
-        for w in dict_brands_models.keys():
-            pattern = re.escape(w)
-            for match in re.finditer(pattern, translit_text, re.IGNORECASE):
-                start, end = match.start(), match.end()
-                matches.append((start, end, w))
+        pattern_list += [re.escape(w) for w in dict_brands_models.keys()]
 
-    # Удаляем дубли по позициям
-    matches = list(set(matches))
-    matches.sort(key=lambda x: x[0])
+    pattern_combined = '|'.join(pattern_list)
+
+    # Находим все совпадения одним проходом
+    for match in re.finditer(pattern_combined, text, re.IGNORECASE):
+        start, end = match.start(), match.end()
+        matched_text = text[start:end]
+        w_found = None
+        # Проверка по русскому
+        for w in dict_brands_models.keys():
+            if re.fullmatch(re.escape(w), matched_text, re.IGNORECASE):
+                w_found = w
+                break
+        # Проверка по транслиту
+        if not w_found and translit_enabled:
+            translit_match = re.search(re.escape(w), transliterate(matched_text, 'lat2cyr'), re.IGNORECASE)
+            if translit_match:
+                w_found = w
+        if w_found:
+            matches.append((start, end, w_found))
 
     # Подсветка
-    def highlight_match(match):
-        start, end, w = match
+    def highlight_match(m):
+        start, end, w = m
         return f'<mark style="{HIGHLIGHT_STYLE}">{html.escape(text[start:end])}</mark>'
 
     result_html_parts = []
@@ -927,32 +916,6 @@ def process_text(
         result_str = text
 
     return result_str, html_preview
-
-def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, dict_brands_models: Dict[str, str], translit_enabled: bool) -> pd.DataFrame:
-    ext = os.path.splitext(filename)[1].lower()
-    if ext in ['.xlsx', '.xls']:
-        try:
-            df = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
-        except:
-            df = pd.read_excel(io.BytesIO(file_bytes))
-    elif ext == '.csv':
-        try:
-            df = pd.read_csv(io.StringIO(file_bytes.decode('utf-8')))
-        except:
-            df = pd.read_csv(io.StringIO(file_bytes.decode('cp1251', errors='replace')))
-    else:
-        df = pd.DataFrame()
-
-    if col_name not in df.columns:
-        raise ValueError(f"Столбец '{col_name}' не найден в файле.")
-    series = df[col_name].fillna("").astype(str)
-    plain_list = []
-    for txt in series:
-        plain, _ = process_text(txt, {}, dict_brands_models, translit_enabled)
-        plain_list.append(plain)
-    df_result = df.copy()
-    df_result[col_name] = plain_list
-    return df_result
 
 def run():
     st.set_page_config(page_title="🚗 Обработка брендов/моделей", layout="wide")
@@ -1052,14 +1015,35 @@ def run():
                 col_name = st.text_input("Введите название столбца для обработки", value="Название")
             
             if col_name:
-                df_processed = process_file_for_processing(file_bytes, uploaded_file.name, col_name, car_brands_models, translit_enabled)
-                st.success("Файл успешно обработан")
-                st.dataframe(df_processed)
+                # Обработка файла по строкам с прогресс-баром
+                if ext in ['.xlsx', '.xls']:
+                    df_full = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
+                elif ext == '.csv':
+                    try:
+                        df_full = pd.read_csv(io.StringIO(file_bytes.decode('utf-8')))
+                    except:
+                        df_full = pd.read_csv(io.StringIO(file_bytes.decode('cp1251', errors='replace')))
+                else:
+                    df_full = pd.DataFrame()
+
+                total_rows = len(df_full)
+                processed_list = []
+                progress = st.progress(0)
+                for idx, row in enumerate(df_full[col_name]):
+                    txt = str(row)
+                    plain, _ = process_text(txt, {}, car_brands_models, translit_enabled)
+                    processed_list.append(plain)
+                    progress.progress((idx + 1) / total_rows)
+                df_full[col_name] = processed_list
+                st.success("Обработка завершена")
+                st.dataframe(df_full)
+
+                # Скачивание результатов
                 buf_xlsx = io.BytesIO()
-                df_processed.to_excel(buf_xlsx, index=False, engine='openpyxl')
+                df_full.to_excel(buf_xlsx, index=False, engine='openpyxl')
                 buf_xlsx.seek(0)
                 st.download_button("Скачать как Excel", buf_xlsx, "processed_" + uploaded_file.name, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                buf_csv = df_processed.to_csv(index=False).encode('utf-8')
+                buf_csv = df_full.to_csv(index=False).encode('utf-8')
                 st.download_button("Скачать как CSV", buf_csv, "processed_" + os.path.splitext(uploaded_file.name)[0]+".csv", mime="text/csv")
             else:
                 st.warning("Не удалось определить название столбца.")
