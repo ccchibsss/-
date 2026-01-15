@@ -851,7 +851,7 @@ def process_text(
     dict_brands_models: Dict[str, str],
     translit_enabled: bool
 ) -> Tuple[str, str]:
-    """Обработка текста: поиск по словарю и транслиту, формирование строки без подсветки."""
+    """Обработка текста: поиск по словарю и транслиту, выводит оригинал и все переводы в скобках."""
     if not text:
         return text, ""
     search_terms = list(dict_brands_models.keys())
@@ -878,20 +878,20 @@ def process_text(
                 else:
                     start_in_orig = start_idx
                     end_in_orig = end_idx
-                matches_info.append((start_in_orig, end_in_orig, word))
-    # Формируем строку без подсветки
-    if matches_info:
-        parts = []
-        for start, end, w in matches_info:
-            trans_word = dict_brands_models.get(w, "")
-            original_segment = text[start:end]
-            # Формируем: "оригинал/перевод"
-            parts.append(f"{original_segment}/{trans_word}")
-        translations_str = " / ".join(parts)
-        result_str = f"{text} - ({translations_str})"
+                matches_info.append((start_in_orig, end_in_orig, w))
+    # Собираем все переводы для найденных слов
+    translations = []
+    for _, _, w in matches_info:
+        trans_word = dict_brands_models.get(w, "")
+        translations.append(trans_word)
+
+    # Итоговая строка: оригинал + (переводы через /)
+    if translations:
+        full_translation = " / ".join(translations)
+        result_str = f"{text} - ({full_translation})"
     else:
         result_str = text
-    # Возвращаем обработанный текст и пустую строку вместо подсветки
+
     return result_str, ""
 
 def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, dict_brands_models: Dict[str, str], translit_enabled: bool) -> pd.DataFrame:
