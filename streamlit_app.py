@@ -848,7 +848,7 @@ def process_text(
     dict_brands_models: dict,
     translit_enabled: bool
 ) -> str:
-    """Обработка текста с сохранением структуры и заменой слов."""
+    """Обработка текста с добавлением переводов в конце всей строки."""
     if not text:
         return text
 
@@ -856,6 +856,7 @@ def process_text(
     pattern = '|'.join([re.escape(sep) for sep in separators])
     parts = re.split(f'({pattern})', text)
 
+    found_translations = set()
     processed_parts = []
 
     for part in parts:
@@ -870,24 +871,30 @@ def process_text(
                 translit_text = transliterate(segment, 'lat2cyr')
                 search_texts.append(translit_text)
 
-            # Используем регулярное выражение для поиска слов
             pattern_words = '|'.join([re.escape(k) for k in dict_brands_models.keys()])
             regex = re.compile(rf'({pattern_words})', re.IGNORECASE)
 
+            # Ищем и добавляем переводы к найденным словам
+            def replacer(match):
+                word_found = match.group(0)
+                key_lower = word_found.lower()
+                for key in dict_brands_models:
+                    if key.lower() == key_lower:
+                        found_translations.add(dict_brands_models[key])
+                        break
+                return word_found
+
             for t in search_texts:
-                t_lower = t.lower()
-                def replacer(match):
-                    word_found = match.group(0)
-                    key_lower = word_found.lower()
-                    for key in dict_brands_models:
-                        if key.lower() == key_lower:
-                            return f"{word_found} {dict_brands_models[key]}"
-                    return word_found
                 segment = regex.sub(replacer, segment)
 
             processed_parts.append(segment)
 
-    return ''.join(processed_parts)
+    # Собираем весь текст и добавляем переводы в конце, если есть
+    full_text = ''.join(processed_parts)
+    if found_translations:
+        translations_str = ' / '.join(sorted(found_translations))
+        full_text += f" - ({translations_str})"
+    return full_text
 
 def process_file_for_processing(file_bytes, filename, col_name, dict_brands_models, translit_enabled):
     ext = os.path.splitext(filename)[1].lower()
