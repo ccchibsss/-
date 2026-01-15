@@ -2,7 +2,7 @@
 import io
 import os
 import json
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple
 import pandas as pd
 import streamlit as st
 import html
@@ -799,7 +799,7 @@ car_brands_models: Dict[str, str] = {
 "Trailer": "Прицеп",
 }
 
-# --- Загрузка существующего файла при запуске ---
+# --- Загрузка файла словаря при запуске ---
 ADDITIONS_FILE = "additional_brands.json"
 
 if os.path.exists(ADDITIONS_FILE):
@@ -845,34 +845,18 @@ def update_dict_from_uploaded_file(uploaded_file):
     except Exception as e:
         st.error(f"Ошибка при загрузке файла словаря: {e}")
 
-def highlight_html_full(text: str, matches: list) -> str:
-    """Подсветка совпадений в тексте."""
-    if not matches:
-        return html.escape(text)
-    matches_sorted = sorted(matches, key=lambda x: x[0])
-    out = []
-    last_idx = 0
-    for start, end, _ in matches_sorted:
-        if start > last_idx:
-            out.append(html.escape(text[last_idx:start]))
-        out.append(f'<mark style="{HIGHLIGHT_STYLE}">{html.escape(text[start:end])}</mark>')
-        last_idx = end
-    if last_idx < len(text):
-        out.append(html.escape(text[last_idx:]))
-    return "".join(out)
-
-HIGHLIGHT_STYLE = "background: #ffeb3b; color: #000; padding: 0 2px; border-radius: 2px;"
-
 def process_text(
     text: str,
     struct: dict,
     dict_brands_models: Dict[str, str],
     translit_enabled: bool
 ) -> Tuple[str, str]:
-    """Обработка текста: поиск по словарю и транслиту, подсветка, формирование строки."""
+    """Обработка текста: поиск по словарю и транслиту, формирование строки без подсветки."""
     if not text:
         return text, ""
     search_terms = list(dict_brands_models.keys())
+
+    # Создаем список для поиска: исходный текст и транслит
     texts_for_search = [text]
     translit_text = ''
     if translit_enabled:
@@ -887,28 +871,28 @@ def process_text(
             start_idx = t_lower.find(word_lower)
             if start_idx != -1:
                 end_idx = start_idx + len(word_lower)
+                # Определяем позицию в оригинальном тексте
                 if t is translit_text:
                     start_in_orig = 0
                     end_in_orig = len(text)
                 else:
                     start_in_orig = start_idx
                     end_in_orig = end_idx
-                matches_info.append((start_in_orig, end_in_orig, word, ""))
-    # Подсветка
-    html_preview = highlight_html_full(text, [ (start, end, _) for start, end, _, _ in matches_info ])
-
+                matches_info.append((start_in_orig, end_in_orig, word))
+    # Формируем строку без подсветки
     if matches_info:
         parts = []
-        for start, end, w, _ in matches_info:
+        for start, end, w in matches_info:
             trans_word = dict_brands_models.get(w, "")
             original_segment = text[start:end]
-            # Формируем: "Русское название/оригинальный текст"
-            parts.append(f"{trans_word}/{original_segment}")
+            # Формируем: "оригинал/перевод"
+            parts.append(f"{original_segment}/{trans_word}")
         translations_str = " / ".join(parts)
         result_str = f"{text} - ({translations_str})"
     else:
         result_str = text
-    return result_str, html_preview
+    # Возвращаем обработанный текст и пустую строку вместо подсветки
+    return result_str, ""
 
 def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str, dict_brands_models: Dict[str, str], translit_enabled: bool) -> pd.DataFrame:
     ext = os.path.splitext(filename)[1].lower()
@@ -1000,7 +984,7 @@ def run():
         """
         <div style="background:linear-gradient(90deg,#2196F3,#21CBF3);padding:16px;border-radius:8px;margin-top:20px">
         <h2 style="color:white;margin:0">🚗 Обработка данных</h2>
-        <p style="color:rgba(255,255,255,0.9);margin:4px 0 0">Загрузите файл (Excel или CSV), поиск и подсветка</p>
+        <p style="color:rgba(255,255,255,0.9);margin:4px 0 0">Загрузите файл (Excel или CSV), поиск и обработка</p>
         </div>
         """,
         unsafe_allow_html=True,
