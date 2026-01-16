@@ -6,6 +6,7 @@ from typing import Dict
 import pandas as pd
 import streamlit as st
 import re
+from transliterate import translit
 
 # Импорт морфологического анализатора (не обязательно)
 try:
@@ -14,21 +15,18 @@ try:
 except Exception:
     morph = None
 
-# --- Словарь транслитерации ---
-latin_to_cyr = {
-    'A':'А','a':'а','B':'Б','b':'б','V':'В','v':'в','G':'Г','g':'г',
-    'D':'Д','d':'д','E':'Е','e':'е','Yo':'Ё','yo':'ё','ZH':'Ж','zh':'ж',
-    'Z':'З','z':'з','I':'И','i':'и','Y':'Й','y':'й','K':'К','k':'к',
-    'L':'Л','l':'л','M':'М','m':'м','N':'Н','n':'н','O':'О','o':'о',
-    'P':'П','p':'п','R':'Р','r':'р','S':'С','s':'с','T':'Т','t':'т',
-    'U':'У','u':'у','F':'Ф','f':'ф','Kh':'Х','kh':'х','Ts':'Ц','ts':'ц',
-    'Ch':'Ч','ch':'ч','Sh':'Ш','sh':'ш','Shch':'Щ','shch':'щ',
-    'Y\'':'Ы','y\'':'ы','E\'':'Э','e\'':'э','Yu':'Ю','yu':'ю','Ya':'Я','ya':'я'
-}
-# Обратный словарь для кириллицы в латиницу
-cyrillic_to_latin = {v: k for k, v in latin_to_cyr.items()}
-
+# --- Функции транслитерации ---
 def transliterate_latin_to_cyrillic(text: str) -> str:
+    latin_to_cyr = {
+        'A':'А','a':'а','B':'Б','b':'б','V':'В','v':'в','G':'Г','g':'г',
+        'D':'Д','d':'д','E':'Е','e':'е','Yo':'Ё','yo':'ё','ZH':'Ж','zh':'ж',
+        'Z':'З','z':'з','I':'И','i':'и','Y':'Й','y':'й','K':'К','k':'к',
+        'L':'Л','l':'л','M':'М','m':'м','N':'Н','n':'н','O':'О','o':'о',
+        'P':'П','p':'п','R':'Р','r':'р','S':'С','s':'с','T':'Т','t':'т',
+        'U':'У','u':'у','F':'Ф','f':'ф','Kh':'Х','kh':'х','Ts':'Ц','ts':'ц',
+        'Ch':'Ч','ch':'ч','Sh':'Ш','sh':'ш','Shch':'Щ','shch':'щ',
+        "Y'":"Ы","y'":"ы","E'":"Э","e'":"э","Yu':'Ю','yu':'ю','Ya':'Я','ya':'я'
+    }
     result = ''
     i = 0
     while i < len(text):
@@ -47,6 +45,16 @@ def transliterate_latin_to_cyrillic(text: str) -> str:
     return result
 
 def transliterate_cyrillic_to_latin(text: str) -> str:
+    cyrillic_to_latin = {
+        'А':'A','а':'a','Б':'B','б':'b','В':'V','в':'v','Г':'G','г':'g',
+        'Д':'D','д':'d','Е':'E','е':'e','Ё':'Yo','ё':'yo','Ж':'Zh','ж':'zh',
+        'З':'Z','з':'z','И':'I','и':'i','Й':'Y','й':'y','К':'K','к':'k',
+        'Л':'L','л':'l','М':'M','м':'m','Н':'N','н':'n','О':'O','о':'o',
+        'П':'P','п':'p','Р':'R','р':'r','С':'S','с':'s','Т':'T','т':'t',
+        'У':'U','у':'u','Ф':'F','ф':'f','Х':'Kh','х':'kh','Ц':'Ts','ц':'ts',
+        'Ч':'Ch','ч':'ch','Ш':'Sh','ш':'sh','Щ':'Shch','щ':'shch',
+        'Ы':'Y\'','ы':'y\'','Э':'E\'','э':'e\'','Ю':'Yu','ю':'yu','Я':'Ya','я':'ya'
+    }
     result = ''
     for ch in text:
         result += cyrillic_to_latin.get(ch, ch)
@@ -60,6 +68,7 @@ def transliterate(text: str, direction: str='lat2cyr') -> str:
     else:
         return text
 
+# --- Основной код ---
 # Ваш словарь марок и моделей
 car_brands_models: Dict[str, str] = {
     "Kia": "Киа",
@@ -115,16 +124,12 @@ def process_text(text: str, dict_brands_models: dict, translit_enabled: bool) ->
     if not text:
         return text
 
-    # Определяем разделители
     separators = ['/', ';', '-', '—', '–']
     pattern_sep = '|'.join([re.escape(s) for s in separators])
-    # Разделяем по разделителям, сохраняя их
     parts = re.split(f'({pattern_sep})', text)
 
-    # Создаем словарь для поиска
     dict_lower = {k.lower(): v for k, v in dict_brands_models.items()}
 
-    # Регулярное выражение для поиска слов
     pattern_words = '|'.join([re.escape(k) for k in dict_brands_models.keys()])
     regex = re.compile(rf'({pattern_words})', re.IGNORECASE)
 
@@ -134,7 +139,6 @@ def process_text(text: str, dict_brands_models: dict, translit_enabled: bool) ->
     for part in parts:
         part_strip = part.strip()
         if part_strip in separators:
-            # Просто разделитель
             processed_parts.append(part)
         else:
             segment = part
@@ -155,10 +159,8 @@ def process_text(text: str, dict_brands_models: dict, translit_enabled: bool) ->
 
             processed_parts.append(segment)
 
-    # Собираем итоговую строку
     full_text = ''.join(processed_parts)
 
-    # Вставляем внутри скобок оригинал и переводы, если есть
     if found_translations:
         translations_str = ' / '.join(sorted(found_translations))
         return f"{full_text} - ({full_text} [{translations_str}])"
