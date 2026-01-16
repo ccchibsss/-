@@ -1,12 +1,5 @@
 # !/usr/bin/env python3
-# Улучшенная и более надёжная версия исходного скрипта для Streamlit
-# Основные улучшения:
-# - Более устойчивое определение языка (подсчёт кириллических/латинских букв)
-# - Сохранение регистра при подстановке (всё, Title, lower)
-# - Более корректная токенизация с сохранением пробелов и пунктуации
-# - Безопасная запись файла (атомарно) и обработка ошибок с логированием
-# - Чтение CSV/XLSX с запасными кодировками
-# - Небольшой пример словаря для теста (замените на полный)
+# Улучшенная версия для Streamlit с настройками обработки
 
 from __future__ import annotations
 import io
@@ -20,7 +13,7 @@ import re
 import pandas as pd
 import streamlit as st
 
-# Optional morphological analyzer
+# Попытка импортировать pymorphy2 (опционально)
 try:
     import pymorphy2
     morph = pymorphy2.MorphAnalyzer()
@@ -32,7 +25,7 @@ logging.basicConfig(level=logging.INFO)
 # --- Настройки ---
 ADDITIONS_FILE = "additional_brands.json"
 
-# Пример словаря (замените/дополните на полный)
+# Пример словаря брендов и моделей
 car_brands_models: Dict[str, str] = {
     "Acura": "Акура",
     "Integra": "Интегра",
@@ -73,7 +66,6 @@ _CYR_TO_LAT = {
     'Ы':"Y'",'ы':"y'",'Э':"E'",'э':"e'",'Ю':'Yu','ю':'yu','Я':'Ya','я':'ya'
 }
 
-# compile sorted keys for longest-first matching
 _LAT_KEYS = sorted(_LAT_TO_CYR.keys(), key=len, reverse=True)
 
 def transliterate_latin_to_cyrillic(text: str) -> str:
@@ -110,7 +102,6 @@ def transliterate(text: str, direction: str = 'lat2cyr') -> str:
 # --- Вспомогательные функции ---
 def safe_save_json(dictionary: Dict[str, str], filename: str = ADDITIONS_FILE) -> None:
     try:
-        # атомарная запись
         dirn = os.path.dirname(filename) or '.'
         with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=dirn, delete=False) as tmp:
             json.dump(dictionary, tmp, ensure_ascii=False, indent=2)
@@ -132,7 +123,6 @@ def load_additional_dict(filename: str = ADDITIONS_FILE) -> Dict[str, str]:
         logging.exception("Failed to load additions file")
     return {}
 
-# Язык: подсчёт букв
 _RE_CYR = re.compile(r'[А-Яа-яЁё]')
 _RE_LAT = re.compile(r'[A-Za-z]')
 
@@ -141,81 +131,92 @@ def detect_language(text: str) -> str:
         return 'ru'
     cyr = len(_RE_CYR.findall(text))
     lat = len(_RE_LAT.findall(text))
-    # Threshold: если латинских букв больше, считаем en
     return 'en' if lat > cyr else 'ru'
 
 def preserve_case_replace(src: str, repl: str) -> str:
-    # Сохранить регистр: UPPER, Title, lower
     if src.isupper():
         return repl.upper()
     if src.istitle():
         return repl.capitalize()
     return repl
 
-# Токенизация: возвращаем последовательность токенов (слова, пробелы,
-# пунктуация)
 _RE_TOK = re.compile(r'\w+|\s+|[^\w\s]+', flags=re.UNICODE)
 
-def process_text(text: str, dict_brands_models: Dict[str, str], translit_enabled: bool = True) -> str:
+# Новая функция: обработка текста с учетом флага транслита
+def process_text(
+    text: str,
+    dict_brands_models: Dict[str, str],
+    translit_enabled: bool = True,
+    enable_dict: bool = True,
+    enable_en_ru: bool = True,
+    enable_lat_cyr: bool = True
+) -> str:
     if text is None:
         return ''
     original = text
-    # нормализованный словарь для быстрых проверок (lower -> value)
     norm_map = {k.lower(): v for k, v in dict_brands_models.items()}
 
     tokens = _RE_TOK.findall(text)
     lang = detect_language(text)
 
+    translit_words = []
+
     for i, tk in enumerate(tokens):
-        # process only word tokens (letters/digits/underscore)
         if tk.strip() and tk.strip().isalnum():
             key = tk.lower()
             replacement: Optional[str] = None
-            if key in norm_map:
+            # Обработка по словарю
+            if enable_dict and key in norm_map:
                 replacement = preserve_case_replace(tk, norm_map[key])
-            elif translit_enabled:
-                # try transliteration of latin to cyrillic
+            elif enable_en_ru:
+                # Можно добавить дополнительные правила
+                pass
+            # Обработка транслитерации латиницы
+            if enable_lat_cyr and re.match(r'^[A-Za-z]+$', tk):
                 trans = transliterate(tk, 'lat2cyr')
+                # Проверка, есть ли транслит в словаре
                 if trans.lower() in norm_map:
                     replacement = preserve_case_replace(tk, norm_map[trans.lower()])
                 else:
-                    # also try removing non-alnum from boundaries and retry
-                    pass
-            if replacement is not None:
-                tokens[i] = replacement
+                    # Добавляем латинское слово к транслитам для финального вывода
+                    translit_words.append(tk)
+                # Замена
+                if replacement is not None:
+                    tokens[i] = replacement
 
     joined = ''.join(tokens)
 
-    # Если исходный текст английский (латиница доминирует), добавляем транслит в скобках
-    if lang == 'en':
+    # Для английского добавляем транслит
+    if lang == 'en' and enable_lat_cyr:
         text_translit = transliterate(joined, 'lat2cyr')
         return f"{original} - ({text_translit})"
 
-    # В остальных случаях возвращаем оригинал + обработанный в скобках (если изменился)
+    # Для русского или других
     if joined == original:
         return f"{original} - ({joined})"
     return f"{original} - ({joined})"
 
-# --- Работа с загруженным файлом ---
+# --- Работа с файлами и обработка ---
 def read_dataframe_from_bytes(file_bytes: bytes, filename: str) -> pd.DataFrame:
     ext = os.path.splitext(filename)[1].lower()
     if ext in ('.xlsx', '.xls'):
-        # try openpyxl first; pandas can auto select engine in some setups
         return pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
     if ext == '.csv':
-        # try utf-8 then cp1251
         for enc in ('utf-8', 'cp1251'):
             try:
                 return pd.read_csv(io.StringIO(file_bytes.decode(enc)), dtype=str)
             except Exception:
                 continue
-        # fallback: let pandas guess with latin1
         return pd.read_csv(io.StringIO(file_bytes.decode('latin1')), dtype=str)
-    # unknown -> empty
     return pd.DataFrame()
 
-def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str,
-                                dict_brands_models: Dict[str, str], translit_enabled: bool) -> pd.DataFrame:
+def process_file_for_processing(
+    file_bytes: bytes,
+    filename: str,
+    col_name: str,
+    dict_brands_models: Dict[str, str],
+    translit_enabled: bool
+) -> pd.DataFrame:
     df = read_dataframe_from_bytes(file_bytes, filename)
     if df.empty:
         raise ValueError("В файле нет данных или формат не поддерживается.")
@@ -227,45 +228,47 @@ def process_file_for_processing(file_bytes: bytes, filename: str, col_name: str,
     df_out[col_name] = processed
     return df_out
 
-# --- Загрузка дополнительных данных при старте ---
+# --- Загрузка словаря при старте ---
 car_brands_models.update(load_additional_dict(ADDITIONS_FILE))
 
-# --- Streamlit UI ---
-def update_dict_from_uploaded_file(uploaded_file) -> None:
-    try:
-        data = uploaded_file.read()
-        name = uploaded_file.name.lower()
-        new = {}
-        if name.endswith('.json'):
-            obj = json.loads(data.decode('utf-8'))
-            if isinstance(obj, dict):
-                new = {str(k): str(v) for k, v in obj.items()}
-        elif name.endswith('.csv'):
-            df = pd.read_csv(io.StringIO(data.decode('utf-8')))
-            if df.shape[1] >= 2:
-                new = {str(k): str(v) for k, v in zip(df.iloc[:,0].astype(str), df.iloc[:,1].astype(str))}
-        elif name.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(io.BytesIO(data), engine='openpyxl')
-            if df.shape[1] >= 2:
-                new = {str(k): str(v) for k, v in zip(df.iloc[:,0].astype(str), df.iloc[:,1].astype(str))}
-        if new:
-            car_brands_models.update(new)
-            safe_save_json(car_brands_models, ADDITIONS_FILE)
-            st.success("Словарь обновлён и сохранён.")
-        else:
-            st.warning("Не удалось распарсить файл словаря.")
-    except Exception as e:
-        logging.exception("update_dict_from_uploaded_file failed")
-        st.error(f"Ошибка при загрузке словаря: {e}")
-
+# --- UI Streamlit ---
 def run():
     st.set_page_config(page_title="🚗 Обработка брендов/моделей", layout="wide")
     st.title("Обработка брендов/моделей")
 
+    # Чекбоксы для флагов
+    enable_dict = st.checkbox("Обрабатывать по словарю", value=True)
+    enable_en_ru = st.checkbox("Обрабатывать английский/русский", value=True)
+    enable_lat_cyr = st.checkbox("Обрабатывать транслит (лат→кир)", value=True)
+
+    # Загрузка файла словаря
     uploaded_dict_file = st.file_uploader("Загрузить файл словаря (JSON, CSV или XLSX)", type=["json", "csv", "xlsx"])
     if uploaded_dict_file:
-        update_dict_from_uploaded_file(uploaded_dict_file)
+        try:
+            data = uploaded_dict_file.read()
+            name = uploaded_dict_file.name.lower()
+            new = {}
+            if name.endswith('.json'):
+                obj = json.loads(data.decode('utf-8'))
+                if isinstance(obj, dict):
+                    new = {str(k): str(v) for k, v in obj.items()}
+            elif name.endswith('.csv'):
+                df = pd.read_csv(io.StringIO(data.decode('utf-8')))
+                if df.shape[1] >= 2:
+                    new = {str(k): str(v) for k, v in zip(df.iloc[:,0].astype(str), df.iloc[:,1].astype(str))}
+            elif name.endswith(('.xlsx', '.xls')):
+                df = pd.read_excel(io.BytesIO(data), engine='openpyxl')
+                if df.shape[1] >= 2:
+                    new = {str(k): str(v) for k, v in zip(df.iloc[:,0].astype(str), df.iloc[:,1].astype(str))}
+            if new:
+                car_brands_models.clear()
+                car_brands_models.update(new)
+                safe_save_json(car_brands_models, ADDITIONS_FILE)
+                st.success("Словарь обновлён и сохранён.")
+        except Exception as e:
+            st.error(f"Ошибка при загрузке словаря: {e}")
 
+    # Редактирование словаря вручную
     dict_text = "\n".join(f"{k},{v}" for k, v in car_brands_models.items())
     edited_text = st.text_area("Редактировать словарь (каждая строка: латиница,кириллица)", value=dict_text, height=200)
     if st.button("Сохранить словарь"):
@@ -285,13 +288,12 @@ def run():
         else:
             st.warning("Нет корректных строк для сохранения.")
 
-    translit_enabled = st.checkbox("Искать и по транслиту (лат→кир)", value=True)
-
+    # Обработка файла
     uploaded_file = st.file_uploader("Загрузите Excel или CSV файл", type=["xlsx", "xls", "csv"])
     if uploaded_file:
         try:
             file_bytes = uploaded_file.read()
-            # preview
+            # Предварительный просмотр
             try:
                 df_preview = read_dataframe_from_bytes(file_bytes, uploaded_file.name).head(5)
             except Exception:
@@ -300,24 +302,22 @@ def run():
                 col_name = st.selectbox("Выберите столбец для обработки", options=list(df_preview.columns))
             else:
                 col_name = st.text_input("Введите название столбца для обработки", value="Название")
-
             if col_name:
-                df_processed = process_file_for_processing(file_bytes, uploaded_file.name, col_name, car_brands_models, translit_enabled)
-                st.success("Файл обработан")
+                df_processed = process_file_for_processing(file_bytes, uploaded_file.name, col_name, car_brands_models, enable_lat_cyr)
+                st.success("Обработка завершена")
                 st.dataframe(df_processed)
-                # downloads
+                # Скачать результат
                 buf_xlsx = io.BytesIO()
                 df_processed.to_excel(buf_xlsx, index=False, engine='openpyxl')
                 buf_xlsx.seek(0)
-                st.download_button("Скачать как Excel", buf_xlsx, file_name="processed_" + uploaded_file.name,
+                st.download_button("Скачать как Excel", buf_xlsx, file_name=f"processed_{uploaded_file.name}",
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 buf_csv = df_processed.to_csv(index=False).encode('utf-8')
-                st.download_button("Скачать как CSV", buf_csv, file_name="processed_" + os.path.splitext(uploaded_file.name)[0] + ".csv",
+                st.download_button("Скачать как CSV", buf_csv, file_name=f"processed_{os.path.splitext(uploaded_file.name)[0]}.csv",
                                    mime="text/csv")
             else:
                 st.warning("Укажите имя столбца для обработки.")
         except Exception as e:
-            logging.exception("Processing uploaded file failed")
             st.error(f"Ошибка при обработке файла: {e}")
 
 if __name__ == "__main__":
