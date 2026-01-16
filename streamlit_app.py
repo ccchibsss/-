@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Улучшенная версия для Streamlit с настройками обработки
+# Обновленная версия для Streamlit с правильной обработкой текста
 
 from __future__ import annotations
 import io
@@ -142,7 +142,7 @@ def preserve_case_replace(src: str, repl: str) -> str:
 
 _RE_TOK = re.compile(r'\w+|\s+|[^\w\s]+', flags=re.UNICODE)
 
-# Новая функция: обработка текста с учетом флага транслита и опций
+# Обновленная функция обработки текста
 def process_text(
     text: str,
     dict_brands_models: Dict[str, str],
@@ -154,6 +154,7 @@ def process_text(
     if text is None:
         return ''
     original = text
+
     norm_map = {k.lower(): v for k, v in dict_brands_models.items()}
 
     tokens = _RE_TOK.findall(text)
@@ -163,31 +164,25 @@ def process_text(
         if tk.strip() and tk.strip().isalnum():
             key = tk.lower()
             replacement: Optional[str] = None
-            # Обработка по словарю
             if enable_dict and key in norm_map:
                 replacement = preserve_case_replace(tk, norm_map[key])
             elif enable_en_ru:
-                pass  # Можно добавить дополнительные правила
-            # Обработка транслитерации латиницы
+                pass
             if enable_lat_cyr and re.match(r'^[A-Za-z]+$', tk):
                 trans = transliterate(tk, 'lat2cyr')
                 if trans.lower() in norm_map:
                     replacement = preserve_case_replace(tk, norm_map[trans.lower()])
-                # иначе оставить как есть
                 if replacement is not None:
                     tokens[i] = replacement
 
     joined = ''.join(tokens)
 
-    # Для английского добавляем транслит
+    # Формируем финальный результат
     if lang == 'en' and enable_lat_cyr:
-        text_translit = transliterate(joined, 'lat2cyr')
-        return f"{original} - ({text_translit})"
-
-    # Для русского или других языков
-    if joined == original:
-        return f"{original} - ({joined})"
-    return f"{original} - ({joined})"
+        translit_text = transliterate(joined, 'lat2cyr')
+        return f'"{original}" - ({translit_text})'
+    else:
+        return f'"{original}"'
 
 # --- Работа с файлами ---
 def read_dataframe_from_bytes(file_bytes: bytes, filename: str) -> pd.DataFrame:
