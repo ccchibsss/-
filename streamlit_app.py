@@ -1,4 +1,4 @@
-# !/usr/bin/env python3
+#!/usr/bin/env python3
 # Улучшенная версия для Streamlit с настройками обработки
 
 from __future__ import annotations
@@ -142,7 +142,7 @@ def preserve_case_replace(src: str, repl: str) -> str:
 
 _RE_TOK = re.compile(r'\w+|\s+|[^\w\s]+', flags=re.UNICODE)
 
-# Новая функция: обработка текста с учетом флага транслита
+# Новая функция: обработка текста с учетом флага транслита и опций
 def process_text(
     text: str,
     dict_brands_models: Dict[str, str],
@@ -159,8 +159,6 @@ def process_text(
     tokens = _RE_TOK.findall(text)
     lang = detect_language(text)
 
-    translit_words = []
-
     for i, tk in enumerate(tokens):
         if tk.strip() and tk.strip().isalnum():
             key = tk.lower()
@@ -169,18 +167,13 @@ def process_text(
             if enable_dict and key in norm_map:
                 replacement = preserve_case_replace(tk, norm_map[key])
             elif enable_en_ru:
-                # Можно добавить дополнительные правила
-                pass
+                pass  # Можно добавить дополнительные правила
             # Обработка транслитерации латиницы
             if enable_lat_cyr and re.match(r'^[A-Za-z]+$', tk):
                 trans = transliterate(tk, 'lat2cyr')
-                # Проверка, есть ли транслит в словаре
                 if trans.lower() in norm_map:
                     replacement = preserve_case_replace(tk, norm_map[trans.lower()])
-                else:
-                    # Добавляем латинское слово к транслитам для финального вывода
-                    translit_words.append(tk)
-                # Замена
+                # иначе оставить как есть
                 if replacement is not None:
                     tokens[i] = replacement
 
@@ -191,12 +184,12 @@ def process_text(
         text_translit = transliterate(joined, 'lat2cyr')
         return f"{original} - ({text_translit})"
 
-    # Для русского или других
+    # Для русского или других языков
     if joined == original:
         return f"{original} - ({joined})"
     return f"{original} - ({joined})"
 
-# --- Работа с файлами и обработка ---
+# --- Работа с файлами ---
 def read_dataframe_from_bytes(file_bytes: bytes, filename: str) -> pd.DataFrame:
     ext = os.path.splitext(filename)[1].lower()
     if ext in ('.xlsx', '.xls'):
@@ -236,7 +229,7 @@ def run():
     st.set_page_config(page_title="🚗 Обработка брендов/моделей", layout="wide")
     st.title("Обработка брендов/моделей")
 
-    # Чекбоксы для флагов
+    # Флаги обработки
     enable_dict = st.checkbox("Обрабатывать по словарю", value=True)
     enable_en_ru = st.checkbox("Обрабатывать английский/русский", value=True)
     enable_lat_cyr = st.checkbox("Обрабатывать транслит (лат→кир)", value=True)
@@ -288,35 +281,35 @@ def run():
         else:
             st.warning("Нет корректных строк для сохранения.")
 
-    # Обработка файла
+    # Загрузка файла для обработки
     uploaded_file = st.file_uploader("Загрузите Excel или CSV файл", type=["xlsx", "xls", "csv"])
     if uploaded_file:
         try:
             file_bytes = uploaded_file.read()
-            # Предварительный просмотр
-            try:
-                df_preview = read_dataframe_from_bytes(file_bytes, uploaded_file.name).head(5)
-            except Exception:
-                df_preview = pd.DataFrame()
+            # Предварительный просмотр и выбор столбца
+            df_preview = read_dataframe_from_bytes(file_bytes, uploaded_file.name).head(5)
             if not df_preview.empty:
-                col_name = st.selectbox("Выберите столбец для обработки", options=list(df_preview.columns))
+                col_options = list(df_preview.columns)
+                col_name = st.selectbox("Выберите столбец для обработки", options=col_options)
             else:
                 col_name = st.text_input("Введите название столбца для обработки", value="Название")
-            if col_name:
+            # Кнопка для запуска обработки
+            if st.button("Обработать файл"):
                 df_processed = process_file_for_processing(file_bytes, uploaded_file.name, col_name, car_brands_models, enable_lat_cyr)
                 st.success("Обработка завершена")
                 st.dataframe(df_processed)
-                # Скачать результат
+                # Скачивание в Excel
                 buf_xlsx = io.BytesIO()
                 df_processed.to_excel(buf_xlsx, index=False, engine='openpyxl')
                 buf_xlsx.seek(0)
                 st.download_button("Скачать как Excel", buf_xlsx, file_name=f"processed_{uploaded_file.name}",
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                # Скачивание в CSV
                 buf_csv = df_processed.to_csv(index=False).encode('utf-8')
                 st.download_button("Скачать как CSV", buf_csv, file_name=f"processed_{os.path.splitext(uploaded_file.name)[0]}.csv",
                                    mime="text/csv")
             else:
-                st.warning("Укажите имя столбца для обработки.")
+                st.info("Выберите столбец и нажмите 'Обработать файл'")
         except Exception as e:
             st.error(f"Ошибка при обработке файла: {e}")
 
