@@ -88,20 +88,21 @@ car_brands_models = {
 "Z4": "Зет 4",
 
 # BYD
+"BYD": "Би-Уай-Ди",
 "BYD Atto 3": "Атто 3",
-"BYD Dolphin": "Байджи Дельфин",
-"BYD Han": "Байджи Хан",
-"BYD Qin": "Байджи Цин",
-"BYD Seal": "Байджи Сил",
-"BYD Song": "Байджи Сонг",
-"BYD Tang": "Байджи Танг",
-"BYD Tang EV": "Танг ЕВ",
-"BYD Yuan": "Байджи Юань",
-"BYD Yuan EV": "Байджи Юань ЕВ",
+"BYD Dolphin": "Би-Уай-Ди Дельфин",
+"BYD Han": "Би-Уай-Ди Хан",
+"BYD Qin": "Би-Уай-Ди Цин",
+"BYD Seal": "Би-Уай-Ди Сил",
+"BYD Song": "Би-Уай-Ди Сонг",
+"BYD Tang": "Би-Уай-Ди Танг",
+"BYD Tang EV": "Би-Уай-Ди Танг ЕВ",
+"BYD Yuan": "Би-Уай-Ди Юань",
+"BYD Yuan EV": "Би-Уай-Ди ЕВ",
 
 # Cadillac
 "Cadillac": "Кадиллак",
-"Escalade": "Эскадил",
+"Escalade": "Эскалейд",
 
 # Chery
 "Chery": "Черри",
@@ -121,7 +122,7 @@ car_brands_models = {
 "Cruz": "Круз",
 "Equinox": "Экуинокс",
 "Lacetti": "Лачетти",
-"Malibu": "Мальбу",
+"Malibu": "Малибу",
 "Silverado": "Сильверадо",
 "Spark": "Спарк",
 "Tahoe": "Тахо",
@@ -217,11 +218,11 @@ car_brands_models = {
 "Haval Jolion": "Хавал Джолион",
 
 # Honda
-"Accord": "Акорд",
-"Civic": "Сивик",
-"CR-V": "КР-В",
+"Accord": "Аккорд",
+"Civic": "Цивик",
+"CR-V": "СиэрВ",
 "Fit": "Фит",
-"HR-V": "ХР-В",
+"HR-V": "АшэрВ",
 "Honda": "Хонда",
 "Jazz": "Джаз",
 "NSX": "НСХ",
@@ -230,13 +231,13 @@ car_brands_models = {
 "Ridgeline": "Риджлайн",
 
 # Hongqi
-"Hongqi": "Хунци",
+"Hongqi": "Хончи",
 
 # Hyundai
 "Elantra": "Элантра",
-"Hyundai": "Хёндай",
-"Hyundai Ioniq": "Ионик",
-"Hyundai Santa Cruz": "Санта Крус",
+"Hyundai": "Хендай",
+"Ioniq": "Ионик",
+"Santa Cruz": "Санта Крус",
 "i20": "i20",
 "i30": "i30",
 "i4": "i4",
@@ -276,13 +277,13 @@ car_brands_models = {
 "KAMAZ Trucks": "КамАЗ грузовики",
 
 # Kia
-"Carnival": "Карнавал",
+"Carnival": "Карнивал",
 "Ceed": "Сид",
 "Kia": "Киа",
 "Kia EV6": "Киа EV6",
 "Kia EV9": "Киа EV9",
 "Kia Seltos": "Селтос",
-"Kia Stonic": "Стонік",
+"Kia Stonic": "Стоник",
 "Optima": "Оптима",
 "Rio": "Рио",
 "Sorento": "Соренто",
@@ -307,8 +308,8 @@ car_brands_models = {
 "Lada Vesta Cross": "Лада Веста Кросс",
 "Lada Vesta Sport": "Лада Веста Спорт",
 "Lada Vesta SW": "Лада Веста Универсал",
-"Lada XRAY Cross": "Лада ХРей Кросс",
-"Lada XRay": "Лада Xray",
+"Lada XRAY Cross": "Лада Иксрэй Кросс",
+"Lada XRay": "Лада Иксрэй",
 "Largus": "Ларгус",
 "Niva": "Нива",
 "Vesta": "Веста",
@@ -321,7 +322,7 @@ car_brands_models = {
 "Urus": "Урус",
 
 # Lancia
-"Lancia": "Ланча",
+"Lancia": "Ланция",
 
 # Land Rover
 "Discovery": "Дискавери",
@@ -343,7 +344,7 @@ car_brands_models = {
 
 # Lucid
 "Air": "Эйр",
-"Lucid": "Лусид",
+"Lucid": "Луцид",
 
 # Lynk & Co
 "Lynk & Co": "Линк & Ко",
@@ -382,7 +383,7 @@ car_brands_models = {
 "C-Class": "С-Класс",
 "CLA": "CLA",
 "CLS": "ЦЛС",
-"Citan": "Ситан",
+"Citan": "Цитан",
 "E-Class": "Е-Класс",
 "EQC": "ЭКВЦ",
 "G-Class": "Г-Класс",
@@ -420,7 +421,7 @@ car_brands_models = {
 "Galant": "Галант",
 "L200": "L200",
 "Lancer": "Лансер",
-"Mitsubishi": "Мицубиси",
+"Mitsubishi": "Мицубиши",
 "Mitsubishi L300": "Л300",
 "Outlander": "Аутлендер",
 "Pajero": "Паджеро",
@@ -454,7 +455,7 @@ car_brands_models = {
 "Avalon": "Эвалон",
 "e-NV200": "е-НВ200",
 "GT-R": "ГТ-Р",
-"Juke": "Джук",
+"Juke": "Жук",
 "Leaf": "Лиф",
 "Maxima": "Максима",
 "Murano": "Муранo",
@@ -518,16 +519,16 @@ car_brands_models = {
 "Captur": "Каптюр",
 "Clio": "Клио",
 "Duster": "Дастер",
-"Kangoo": "Кангру",
-"Kangoo Express": "Кангру Экспресс",
-"Kangoo Van": "Кангру Ван",
-"Kangoo ZE": "Кангру ЗЕ",
+"Kangoo": "Кангу",
+"Kangoo Express": "Кангу Экспресс",
+"Kangoo Van": "Кангу Ван",
+"Kangoo ZE": "Кангу ЗЕ",
 "Koleos": "Колеос",
 "Logan": "Логан",
 "Master": "Мастер",
 "Megane": "Меган",
 "Renault": "Рено",
-"Renault Kangoo Express": "Кангру Экспресс",
+"Renault Kangoo Express": "Кангу Экспресс",
 "Renault Master": "Мастер",
 "Renault Master Van": "Мастер Фургон",
 "Renault Trafic Passenger": "Трафик Пассенджер",
@@ -553,8 +554,8 @@ car_brands_models = {
 
 # Skoda
 "Fabia": "Фабия",
-"Karoq": "Кароак",
-"Kodiaq": "Кодьяк",
+"Karoq": "Карок",
+"Kodiaq": "Кодияк",
 "Octavia": "Октавия",
 "Skoda": "Шкода",
 "Skoda Enyaq": "Еняк",
@@ -612,7 +613,7 @@ car_brands_models = {
 "Prius": "Приус",
 "Proace": "Проэйс",
 "RAV4": "Рав 4",
-"Sequoia": "Секвоия",
+"Sequoia": "Секвоя",
 "Sienta": "Сента",
 "Tacoma": "Такома",
 "Toyota": "Тойота",
@@ -650,7 +651,7 @@ car_brands_models = {
 "Multivan": "Мультивэн",
 "Passat": "Пассат",
 "Polo": "Поло",
-"Scirocco": "Широкко",
+"Scirocco": "Сирокко",
 "T-Roc": "Т-Рок",
 "Tiguan": "Тигуан",
 "Touareg": "Туарег",
@@ -748,6 +749,35 @@ car_brands_models = {
 "Tipper": "Самосвальная техника",
 "Touring Bike": "Туристический мотоцикл",
 "Trailer": "Прицеп",
+
+# Дополнение
+"Pickup": "Пикап",
+"DAIHATSU": "Дайхатсу",
+"Explorer": "Эксплорер",
+"Insight": "Инсигт",
+"Coupe": "Купе",
+"GENESIS": "Дженезис",
+"Sports": "Спорт",    
+"SSANGYONG": "Сангёнг",
+"Trucks": "Тракс",
+"Cruiser": "Крузер",
+"Connect": "Коннект", 
+"HYBRID": "Гибрид",
+"Creta": "Крета",
+"HYBRID": "Гибрид",
+"#Н/Д": "",
+"I": "I",
+"II": "II",
+"III": "III",   
+"IV": "IV",
+"IV": "IV",
+"V": "V",
+"VI": "VI",
+"VII": "VII",
+"VIII": "VIII",
+"IX": "IX",
+"X": "X",
+"XI": "XI",
 }
 
 # Расширенный словарь автоматического перевода en→ru
@@ -780,7 +810,7 @@ _LAT_TO_CYR = {
     'Sh':'Ш','sh':'ш','SH':'Ш',
     'Yu':'Ю','yu':'ю','YU':'Ю',
     'Ya':'Я','ya':'я','YA':'Я',
-    "Y'":"Ы","y'":"ы",
+    "Y'":"Ы","y'":"ы",'C':'К'
     "E'":"Э","e'":"э",
     'A':'А','a':'а','B':'Б','b':'б','V':'В','v':'в','G':'Г','g':'г',
     'D':'Д','d':'д','E':'Е','e':'е','Z':'З','z':'з','I':'И','i':'и',
@@ -796,7 +826,7 @@ _CYR_TO_LAT = {
     'Л':'L','л':'l','М':'M','м':'m','Н':'N','н':'n','О':'O','о':'o',
     'П':'P','п':'p','Р':'R','р':'r','С':'S','с':'s','Т':'T','т':'t',
     'У':'U','у':'u','Ф':'F','ф':'f','Х':'Kh','х':'kh','Ц':'Ts','ц':'ts',
-    'Ч':'Ch','ч':'ch','Ш':'Sh','ш':'sh','Щ':'Shch','щ':'shch',
+    'Ч':'Ch','ч':'ch','Ш':'Sh','ш':'sh','Щ':'Shch','щ':'shch', 'C':'К'
     'Ы':"Y'",'ы':"y'",'Э':"E'",'э':'e\'','Ю':'Yu','ю':'yu','Я':'Ya','я':'ya'
 }
 
