@@ -3,15 +3,11 @@ import io
 import os
 import json
 import tempfile
-import logging
 from typing import Dict
 
 import pandas as pd
 import streamlit as st
 import re
-
-# Настройка логирования
-logging.basicConfig(level=logging.INFO)
 
 # Константы
 ADDITIONS_FILE = "additional_brands.json"
@@ -117,9 +113,9 @@ def safe_save_json(dictionary: Dict, filename: str = ADDITIONS_FILE):
             json.dump(dictionary, tmp, ensure_ascii=False, indent=2)
             tmp_name = tmp.name
         os.replace(tmp_name, filename)
-        logging.info("Saved dictionary to %s", filename)
+        print("Saved json to", filename)
     except Exception as e:
-        logging.exception("Error saving json: %s", e)
+        print("Error saving json:", e)
 
 def load_additional_dict(filename: str = ADDITIONS_FILE) -> Dict:
     if not os.path.exists(filename):
@@ -130,7 +126,7 @@ def load_additional_dict(filename: str = ADDITIONS_FILE) -> Dict:
             if isinstance(obj, dict):
                 return {str(k): str(v) for k, v in obj.items()}
     except Exception:
-        logging.exception("Error loading json")
+        print("Error loading json")
     return {}
 
 def detect_language(text: str) -> str:
@@ -149,10 +145,9 @@ def preserve_case_replace(src: str, repl: str) -> str:
 
 _RE_TOK = re.compile(r'\w+|\s+|[^\w\s]+', flags=re.UNICODE)
 
-# Основная функция обработки текста
 def process_text(
     text: str,
-    dict_brands_models: Dict[str, str],
+    dict_brands_models: Dict,
     translit_enabled: bool = True,
     enable_dict: bool = True,
     enable_en_ru: bool = True,
@@ -169,7 +164,7 @@ def process_text(
     for i, tk in enumerate(tokens):
         if tk.strip() and tk.strip().isalnum():
             key = tk.lower()
-            replacement: Optional[str] = None
+            replacement: str = None
 
             # 1. Проверка в основном словаре
             if enable_dict and key in norm_map:
@@ -195,7 +190,6 @@ def process_text(
     else:
         return f'"{original}"'
 
-# --- Работа с файлами ---
 def read_dataframe_from_bytes(file_bytes: bytes, filename: str) -> pd.DataFrame:
     ext = os.path.splitext(filename)[1].lower()
     if ext in ('.xlsx', '.xls'):
@@ -204,7 +198,7 @@ def read_dataframe_from_bytes(file_bytes: bytes, filename: str) -> pd.DataFrame:
         for enc in ('utf-8', 'cp1251'):
             try:
                 return pd.read_csv(io.StringIO(file_bytes.decode(enc)), dtype=str)
-            except Exception:
+            except:
                 continue
         return pd.read_csv(io.StringIO(file_bytes.decode('latin1')), dtype=str)
     return pd.DataFrame()
@@ -221,25 +215,30 @@ def process_file_for_processing(
         raise ValueError("Файл не содержит данных или формат не поддерживается.")
     if col_name not in df.columns:
         raise ValueError(f"Столбец '{col_name}' не найден.")
+    # Преобразуем все значения столбца в строки, чтобы избежать ошибок Arrow
     series = df[col_name].astype(str).fillna("")
     processed = [process_text(s, dict_brands_models, translit_enabled) for s in series]
     df_out = df.copy()
     df_out[col_name] = processed
+    # Приводим все столбцы к строковому типу, чтобы избежать ошибок Arrow
+    for col in df_out.columns:
+        df_out[col] = df_out[col].astype(str)
     return df_out
 
-# --- Загрузка словаря при старте ---
+
+# Загрузка словаря при старте
 car_brands_models.update(load_additional_dict(ADDITIONS_FILE))
 
-# --- Основное приложение ---
+# --- Streamlit UI ---
 def run():
     st.set_page_config(page_title="🚗 Обработка брендов/моделей", layout="wide")
     st.title("Обработка брендов/моделей")
 
-    # Используем сессию для сохранения словаря
+    # Используем сессию для хранения словаря
     if 'car_brands_models' not in st.session_state:
         st.session_state['car_brands_models'] = car_brands_models.copy()
 
-    # Флаги
+    # Флаги обработки
     enable_dict = st.checkbox("Обрабатывать по словарю", value=True)
     enable_en_ru = st.checkbox("Обрабатывать английский/русский", value=True)
     enable_lat_cyr = st.checkbox("Обрабатывать транслит (лат→кирилл)", value=True)
