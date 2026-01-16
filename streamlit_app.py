@@ -110,16 +110,21 @@ def update_dict_from_uploaded_file(uploaded_file):
     except Exception as e:
         st.error(f"Ошибка при загрузке файла: {e}")
 
-# Основная обработка строки с добавлением оригинала и переводов внутри скобок
+# Функция обработки текста с сохранением оригинала и добавлением переводов
 def process_text(text: str, dict_brands_models: dict, translit_enabled: bool) -> str:
     if not text:
         return text
 
+    # Определяем разделители
     separators = ['/', ';', '-', '—', '–']
     pattern_sep = '|'.join([re.escape(s) for s in separators])
+    # Разделяем по разделителям, сохраняя их
     parts = re.split(f'({pattern_sep})', text)
 
+    # Создаем словарь для поиска
     dict_lower = {k.lower(): v for k, v in dict_brands_models.items()}
+
+    # Регулярное выражение для поиска слов
     pattern_words = '|'.join([re.escape(k) for k in dict_brands_models.keys()])
     regex = re.compile(rf'({pattern_words})', re.IGNORECASE)
 
@@ -129,6 +134,7 @@ def process_text(text: str, dict_brands_models: dict, translit_enabled: bool) ->
     for part in parts:
         part_strip = part.strip()
         if part_strip in separators:
+            # Просто разделитель
             processed_parts.append(part)
         else:
             segment = part
@@ -149,8 +155,10 @@ def process_text(text: str, dict_brands_models: dict, translit_enabled: bool) ->
 
             processed_parts.append(segment)
 
+    # Собираем итоговую строку
     full_text = ''.join(processed_parts)
-    # В конце добавляем оригинальный текст и все переводы внутри скобок
+
+    # Вставляем внутри скобок оригинал и переводы, если есть
     if found_translations:
         translations_str = ' / '.join(sorted(found_translations))
         return f"{full_text} - ({full_text} [{translations_str}])"
@@ -166,7 +174,7 @@ def process_file_for_processing(file_bytes, filename, col_name, dict_brands_mode
         try:
             df = pd.read_csv(io.BytesIO(file_bytes))
         except:
-            df = pd.read_csv(io.StringIO(file_bytes.decode('utf-8')))
+            df = pd.read_csv(io.BytesIO(file_bytes), encoding='utf-8')
     else:
         df = pd.DataFrame()
 
