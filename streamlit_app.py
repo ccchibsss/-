@@ -12,7 +12,7 @@ import re
 # Константы
 ADDITIONS_FILE = "additional_brands.json"
 
-# Начальный словарь брендов
+# Начальный словарь брендов (обязательно вставьте весь ваш словарь сюда)
 car_brands_models = {
     "Acura": "Акура",
 "Integra": "Интегра",
@@ -797,7 +797,7 @@ _CYR_TO_LAT = {
     'П':'P','п':'p','Р':'R','р':'r','С':'S','с':'s','Т':'T','т':'t',
     'У':'U','у':'u','Ф':'F','ф':'f','Х':'Kh','х':'kh','Ц':'Ts','ц':'ts',
     'Ч':'Ch','ч':'ch','Ш':'Sh','ш':'sh','Щ':'Shch','щ':'shch',
-    'Ы':"Y'",'ы':"y'",'Э':"E'",'э':"e'",'Ю':'Yu','ю':'yu','Я':'Ya','я':'ya'
+    'Ы':"Y'",'ы':"y'",'Э':"E'",'э':'e\'','Ю':'Yu','ю':'yu','Я':'Ya','я':'ya'
 }
 
 _LAT_KEYS = sorted(_LAT_TO_CYR.keys(), key=len, reverse=True)
@@ -873,9 +873,11 @@ def preserve_case_replace(src: str, repl: str) -> str:
 
 _RE_TOK = re.compile(r'\w+|\s+|[^\w\s]+', flags=re.UNICODE)
 
+# Ваша интегрированная функция обработки текста
 def process_text(
     text: str,
     dict_brands_models: Dict,
+    en_to_ru_map: Dict,
     translit_enabled: bool = True,
     enable_dict: bool = True,
     enable_en_ru: bool = True,
@@ -901,7 +903,7 @@ def process_text(
             elif enable_en_ru:
                 if key in en_to_ru_map:
                     replacement = preserve_case_replace(tk, en_to_ru_map[key])
-            # 3. Транслитерация (лат→кирил)
+            # 3. Транслитерация (лат→кирилл)
             if not replacement and enable_lat_cyr and re.match(r'^[A-Za-z]+$', tk):
                 trans = transliterate(tk, 'lat2cyr')
                 if trans.lower() in norm_map:
@@ -918,6 +920,7 @@ def process_text(
     else:
         return f'"{original}"'
 
+# --- Основные функции обработки файлов ---
 def read_dataframe_from_bytes(file_bytes: bytes, filename: str) -> pd.DataFrame:
     ext = os.path.splitext(filename)[1].lower()
     if ext in ('.xlsx', '.xls'):
@@ -943,18 +946,17 @@ def process_file_for_processing(
         raise ValueError("Файл не содержит данных или формат не поддерживается.")
     if col_name not in df.columns:
         raise ValueError(f"Столбец '{col_name}' не найден.")
-    # Преобразуем все значения столбца в строки, чтобы избежать ошибок Arrow
+    # Преобразуем все значения столбца в строки
     series = df[col_name].astype(str).fillna("")
-    processed = [process_text(s, dict_brands_models, translit_enabled) for s in series]
+    processed = [process_text(s, dict_brands_models, en_to_ru_map) for s in series]
     df_out = df.copy()
     df_out[col_name] = processed
-    # Приводим все столбцы к строковому типу, чтобы избежать ошибок Arrow
+    # Обеспечиваем типы строк для всех колонок
     for col in df_out.columns:
         df_out[col] = df_out[col].astype(str)
     return df_out
 
-
-# Загрузка словаря при старте
+# Загружаем словарь при старте
 car_brands_models.update(load_additional_dict(ADDITIONS_FILE))
 
 # --- Streamlit UI ---
