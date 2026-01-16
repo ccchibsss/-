@@ -119,7 +119,7 @@ def update_dict_from_uploaded_file(uploaded_file):
     except Exception as e:
         st.error(f"Ошибка при загрузке файла: {e}")
 
-# Функция обработки текста с сохранением оригинала и добавлением переводов
+# Обновленная функция для обработки текста
 def process_text(text: str, dict_brands_models: dict, translit_enabled: bool) -> str:
     if not text:
         return text
@@ -139,6 +139,7 @@ def process_text(text: str, dict_brands_models: dict, translit_enabled: bool) ->
     for part in parts:
         part_strip = part.strip()
         if part_strip in separators:
+            # разделитель
             processed_parts.append(part)
         else:
             segment = part
@@ -151,6 +152,7 @@ def process_text(text: str, dict_brands_models: dict, translit_enabled: bool) ->
                 word_found = match.group(0)
                 key_lower = word_found.lower()
                 if key_lower in dict_lower:
+                    # Можно добавить в set перевод
                     found_translations.add(dict_lower[key_lower])
                 return word_found
 
@@ -161,11 +163,8 @@ def process_text(text: str, dict_brands_models: dict, translit_enabled: bool) ->
 
     full_text = ''.join(processed_parts)
 
-    if found_translations:
-        translations_str = ' / '.join(sorted(found_translations))
-        return f"{full_text} - ({full_text} [{translations_str}])"
-    else:
-        return full_text
+    # Форматируем по вашему примеру, без списка переводов
+    return f"{full_text} - ({full_text})"
 
 # Обработка файла для поиска и обработки строк
 def process_file_for_processing(file_bytes, filename, col_name, dict_brands_models, translit_enabled):
