@@ -1,5 +1,7 @@
 streamlit
+duckdb
 pandas
+plotly
+numpy
 openpyxl
 pyarrow
-rich>=10.14.0
